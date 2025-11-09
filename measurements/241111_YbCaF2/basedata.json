@@ -1,0 +1,15 @@
+{
+    "name": "YbCaF2",
+    "date": "241111",
+    "length": 1.1e-2,
+    "tau_f": 1.9e-3,
+    "N_dop": 4.89e26,
+    "density": 3.18e3,
+    "n": 1.429,
+    "temperature": 300,
+    "correct_temp": true,
+    "zero_absorption_width": 150,
+    "energy_lower_level": [0, 50, 110, 530],
+    "energy_upper_level": [10205,10300,10580],
+    "ZPL": 979.9e-9
+}

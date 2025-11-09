@@ -1,0 +1,15 @@
+{
+    "name": "YbLiMgAS",
+    "date": "250408",
+    "length": 1.2e-2,
+    "tau_f": 1.1e-3,
+    "N_dop": 6e26,
+    "density": 2.40e3,
+    "n": 1.55,
+    "temperature": 300,
+    "correct_temp": false,
+    "zero_absorption_width": 100,
+    "energy_lower_level": [0, 233, 372, 595],
+    "energy_upper_level": [10232,10511,10833],
+    "ZPL": 977.3e-9
+}
