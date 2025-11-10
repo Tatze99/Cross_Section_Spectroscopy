@@ -7,8 +7,9 @@
     "density": 3.8e3,
     "n": 1.50,
     "correct_temp": true,
-    "temperature": 300,
-    "zero_absorption_width": 0,
+    "temperature": 295,
+    "zero_absorption_width": 150,
     "energy_lower_level": [0, 180, 323, 568],
-    "energy_upper_level": [10266, 10474, 10773]
+    "energy_upper_level": [10266, 10474, 10773],
+    "ZPL": 974e-9
 }

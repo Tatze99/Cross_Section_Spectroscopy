@@ -6,7 +6,7 @@
     "N_dop": 6e26,
     "density": 2.40e3,
     "n": 1.55,
-    "temperature": 300,
+    "temperature": 295,
     "correct_temp": false,
     "zero_absorption_width": 100,
     "energy_lower_level": [0, 233, 372, 595],

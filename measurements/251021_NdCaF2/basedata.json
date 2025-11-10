@@ -1,0 +1,13 @@
+{
+    "name": "NdCaF2",
+    "date": "251021",
+    "length": 2e-2,
+    "tau_f": 0.6e-3,
+    "N_dop": 0.196e26,
+    "density": 2.40e3,
+    "n": 1.43,
+    "temperature": 295,
+    "correct_temp": false,
+    "zero_absorption_width": 100,
+    "ZPL": 863e-9
+}

@@ -17,6 +17,7 @@ Standard_path = os.path.dirname(os.path.abspath(__file__))
 Delta_lambd = 0.25e-9
 hc = 1.24e-4   # planck constant * speed of light per 1cm in [eV]
 kbT = 0.025266 # Energy of room temperature
+kb = 8.617333e-5 # Boltzmann constant in eV/K
 c = 3e10       # speed of light in cm/s
 
 def set_plot_params():
@@ -113,8 +114,9 @@ class App(customtkinter.CTk):
         
         #switches
         self.config_title = App.create_label(frame, text="Configure Simulation", font=customtkinter.CTkFont(size=16, weight="bold"), row=10, column=0, padx=20, pady=(20, 5),sticky=None)
-        self.crystal_button   = App.create_switch(frame, text="Config Crystal", command=lambda: self.toggle_sidebar_window(self.crystal_button, self.crystal_widgets),  column=0, row=11, padx=20)
-        self.use_McCumber   = App.create_switch(frame, text="Use McCumber", command=None,  column=0, row=12, padx=20)
+        self.use_McCumber   = App.create_switch(frame, text="Use McCumber", command=None,  column=0, row=11, padx=20)
+        self.crystal_button   = App.create_switch(frame, text="Config Crystal", command=lambda: self.toggle_sidebar_window(self.crystal_button, self.crystal_widgets),  column=0, row=12, padx=20)
+        self.absorption_button   = App.create_switch(frame, text="Config Absorption", command=lambda: self.toggle_sidebar_window(self.absorption_button, self.absorption_widgets),  column=0, row=13, padx=20)
 
 
         #Settings section
@@ -154,6 +156,7 @@ class App(customtkinter.CTk):
         self.columnconfigure(2,weight=1)
 
         self.load_crystal_sidebar()
+        self.load_absorption_sidebar()
 
 
     def create_label(self, row, column, width=20, text=None, anchor='e', sticky='e', textvariable=None, padx=(5,5), image=None, pady=None, font=None, columnspan=1, fg_color=None, **kwargs):
@@ -210,27 +213,15 @@ class App(customtkinter.CTk):
     def create_slider(self, from_, to, row, column, width=200, text=None, init_val=None, command=None, columnspan=1, number_of_steps=1000, padx = 10, pady=5, sticky='w', textwidget=False,**kwargs):
         slider = customtkinter.CTkSlider(self, from_=from_, to=to, width=width, command=command, number_of_steps=number_of_steps)
         slider.grid(column=column, row=row, columnspan=columnspan, padx=padx, pady=pady, sticky=sticky, **kwargs)
-        if text is not None:
-            slider_label = App.create_label(self, text=text, column=column-1, row=row, width=20, anchor='e')
-            if textwidget == True:
-                return (slider, slider_label)
         if init_val is not None:
             slider.set(init_val)
-
-        return slider
-    
-    def create_range_slider(self, from_, to, row, column, width=200, text=None, init_value=None, command=None, columnspan=1, number_of_steps=None, padx = 10, pady=5, sticky='w', textwidget=False,**kwargs):
-        slider = CTkRangeSlider(self, from_=from_, to=to, width=width, command=command, number_of_steps=number_of_steps)
-        slider.grid(column=column, row=row, columnspan=columnspan, padx=padx, pady=pady, sticky=sticky, **kwargs)
         if text is not None:
             slider_label = App.create_label(self, text=text, column=column-1, row=row, width=20, anchor='e')
             if textwidget == True:
                 return (slider, slider_label)
-        if init_value is not None:
-            slider.set(init_value)
 
         return slider
-    
+     
     def create_table(self,  width, row, column, sticky=None, rowspan=1, **kwargs):
         text_widget = customtkinter.CTkTextbox(self, width = width, padx=10, pady=5)
         # text_widget.pack(fill="y", expand=True)
@@ -265,10 +256,34 @@ class App(customtkinter.CTk):
         self.crystal_widgets = ["crystal_title", "doping", "thickness", "tau_f", "doping_label", "thickness_label", "tau_f_label"]
         self.toggle_sidebar_window(self.crystal_button, self.crystal_widgets)
 
+    def load_absorption_sidebar(self):
+        row = 10
+        self.absorption_title = App.create_label(self.settings_frame, text="Absorption Settings", font=customtkinter.CTkFont(size=16, weight="bold"), row=row, column=0, columnspan=5, padx=20, pady=(20, 5),sticky=None)
+        self.zero_bandwidth, self.zero_bandwidth_label = App.create_entry(self.settings_frame, column=1, row=row+1, columnspan=2, width=110, text="zero abs. bandwidth", textwidget=True)
+        self.fourier_filter, self.fourier_filter_label = App.create_slider(self.settings_frame, from_=0, to=1, column=1, row=row+2, columnspan=2, width=110-30, padx=(10,40), text="fourier filter", init_val=0, number_of_steps=100, textwidget=True)
+        self.savgol_filter, self.savgol_filter_label = App.create_slider(self.settings_frame, from_=0, to=50, column=1, row=row+3, columnspan=2, width=110-30, padx=(10,40), text="Savitzky Golay filter", init_val=20, number_of_steps=50, textwidget=True)
+
+        for i, (widget, variable, label) in enumerate(zip(["fourier_filter", "savgol_filter"],
+                                                                    ["filter_var", "savgol_var"],
+                                                                    ["filter_lab", "savgol_lab"]),start=2):
+            slider = getattr(self, widget)
+            slider.configure(command=lambda value, strvar=variable: self.update_slider_value(value, strvar))
+            setattr(self, variable, customtkinter.StringVar())
+            setattr(self, label, App.create_label(self.settings_frame, textvariable=getattr(self, variable), column=1, row=row+i, width=30, padx=(10+110-30,10), anchor='e', sticky='e'))
+            getattr(self, variable).set(str(round(slider.get(),2)))
+
+
+        for widget in [self.zero_bandwidth]:
+            widget.bind("<KeyRelease>", lambda val: self.update_material_dictionary(val))
+
+        self.absorption_widgets = ["absorption_title", "zero_bandwidth", "fourier_filter", "savgol_filter", "zero_bandwidth_label", "fourier_filter_label", "savgol_filter_label", "filter_lab", "savgol_lab"]
+        self.toggle_sidebar_window(self.absorption_button, self.absorption_widgets)
+
     def update_material_dictionary(self, value):
         self.material_dict["N_dop"] = float(self.doping.get())*1e6
         self.material_dict["length"] = float(self.thickness.get())*1e-3
         self.material_dict["tau_f"] = float(self.tau_f.get())*1e-3
+        self.material_dict["zero_absorption_width"] = int(self.zero_bandwidth.get())
 
     # load the material
     def load_material(self, material):
@@ -279,6 +294,7 @@ class App(customtkinter.CTk):
         self.doping.reinsert(self.material_dict["N_dop"]*1e-6)
         self.thickness.reinsert(str(self.material_dict["length"]*1e3))
         self.tau_f.reinsert(str(self.material_dict["tau_f"]*1e3))
+        self.zero_bandwidth.reinsert(str(self.material_dict["zero_absorption_width"]))
 
         print(self.material_dict)
 
@@ -341,13 +357,17 @@ class App(customtkinter.CTk):
     def absorption_plot(self):
         self.clear_axis()
 
-        sigma_a, absorption, reference = calc_absorption(self.material_dict)
+        sigma_a, absorption, reference, ratio = calc_absorption(self.material_dict, filter_width=float(self.fourier_filter.get()), savgol_filter_width=int(self.savgol_filter.get()))
 
         self.ax.plot(absorption[:,0], absorption[:,1], label="absorption")
         self.ax.plot(reference[:,0], reference[:,1], label="reference")
+        self.ax.plot(reference[:,0], reference[:,1]/ratio, label="reference raw", c="tab:orange", lw=0.8, alpha=0.7)
+        self.ax.plot(absorption[:,0], sigma_a/(np.max(sigma_a)/np.max(reference[:,1])), label="absorption cross section", c="tab:green", lw=0.8)
 
         self.ax.set_xlabel("wavelength in nm")
         self.ax.set_ylabel("absorption in a.u.")
+        self.ax.legend()
+
         if self.show_title.get(): self.ax.set_title(f"absorption of {self.material_dict['name']}")
 
         self.canvas.draw()
@@ -359,26 +379,30 @@ class App(customtkinter.CTk):
         absorp_name = subfolder + '_Absorption.txt'
         lambdas = np.genfromtxt(os.path.join(Standard_path, "measurements", subfolder, absorp_name), skip_header=2, delimiter=",")[:,0]
 
-        sigma_a, _, _ = calc_absorption(self.material_dict)
-        Fluo, _, _ = calc_fluorescence(self.material_dict)
+        sigma_a = calc_absorption(self.material_dict, filter_width=float(self.fourier_filter.get()), savgol_filter_width=int(self.savgol_filter.get()))[0]
+        Fluo = calc_fluorescence(self.material_dict)[0]
         sigma_e = Fuchtbauer_Ladenburg(Fluo, self.material_dict, sigma_a=sigma_a, absorption_depth=self.absorption_depth)
 
         self.ax.plot(lambdas, sigma_a, label=f"$\\sigma_a$ {self.material_dict['name']}")
-        self.ax.plot(lambdas, sigma_e, label="$\\sigma_e$ FL")
+        self.ax.plot(Fluo[:,0], sigma_e, label="$\\sigma_e$ FL")
 
         self.ax.set_xlabel("wavelength in nm")
         self.ax.set_ylabel("cross sections in cm²")
         if self.show_title.get(): self.ax.set_title(f"cross sections of {self.material_dict['name']}")
 
         if self.use_McCumber.get():
-            sigma_e_McCumber = McCumber_relation(self.material_dict["energy_lower_level"], self.material_dict["energy_upper_level"], sigma_a, lambdas*1e-7, kbT)
+            thermal_energy = kb * self.material_dict.get("temperature", 295)  # in eV
+            E_u = self.material_dict.get("energy_upper_level", [1e-2/self.material_dict["ZPL"]])
+            E_l = self.material_dict.get("energy_lower_level", [0])
+
+            sigma_e_McCumber = McCumber_relation(E_l, E_u, sigma_a, lambdas*1e-7, thermal_energy)
             self.ax.plot(lambdas, sigma_e_McCumber, label="$\\sigma_e$ McCumber")
             self.ax.set_ylim(-1e-21,1.5*np.max(sigma_a))
 
             sigma_e_average = average_MCcumber_FL(lambdas, self.material_dict, sigma_e, sigma_e_McCumber)
             self.ax.plot(lambdas, sigma_e_average, label="$\\sigma_e$ average")
 
-            sigma_a_average = McCumber_relation_inverse(self.material_dict["energy_lower_level"], self.material_dict["energy_upper_level"], sigma_e_average, lambdas*1e-7, kbT)
+            sigma_a_average = McCumber_relation_inverse(E_l, E_u, sigma_e_average, lambdas*1e-7, thermal_energy)
             self.ax.plot(lambdas, sigma_a_average, label="$\\sigma_a$ average")
 
         self.ax.legend()
@@ -493,6 +517,10 @@ class App(customtkinter.CTk):
                     attr.deselect()
         
         self.close_sidebar_window()
+
+    def update_slider_value(self, value, strvar_name):
+        variable = getattr(self, strvar_name)
+        variable.set(str(round(value,2)))
 
     def update_canvas_size(self, canvas_ratio):
         canvas_width = float(self.canvas_width.get())
@@ -681,19 +709,28 @@ def calc_cubic_interpolation(absorption, reference, zero_absorption_width):
     
     return polynomial_fit(absorption[:,0])
 
-def calc_absorption(material, filter_width = 0):
+def calc_absorption(material, filter_width = 0, savgol_filter_width = 20, savgol_filter_order=3):
     subfolder = material["date"] + '_' + material["name"]
     absorp_name = subfolder + '_Absorption'
     absorp_ref_name = subfolder + '_Absorption_reference'
     absorption = np.genfromtxt(os.path.join(Standard_path, "measurements", subfolder, absorp_name + '.txt'), skip_header=2, delimiter=",")
     reference = np.genfromtxt(os.path.join(Standard_path, "measurements", subfolder, absorp_ref_name + '.txt'), skip_header=2, delimiter=",")
         
+    # Assuming: absorption[:,0] and reference[:,0] are x-values
+    x_min = max(absorption[:,0].min(), reference[:,0].min())
+    x_max = min(absorption[:,0].max(), reference[:,0].max())
+
+    # Trim to overlapping region
+    absorption = absorption[(absorption[:,0] >= x_min) & (absorption[:,0] <= x_max)]
+    reference = reference[(reference[:,0] >= x_min) & (reference[:,0] <= x_max)]
+
+    if absorption.shape[0] != reference.shape[0]:
+        # Interpolate to common x-values
+        reference_interp = np.interp(absorption[:,0], reference[:,0], reference[:,1])
+        reference = np.vstack([absorption[:,0], reference_interp]).T
+
     reference = fourier_filter(reference, filter_width = filter_width)
     absorption = fourier_filter(absorption, filter_width = filter_width)
-
-    # savgol filter
-    # absorption[:,1] = savgol_filter(absorption[:,1], 10, 3)
-    # reference[:,1] = savgol_filter(reference[:,1], 100, 3)
     
     # ratio = np.mean(absorption[-20:,1]) / np.mean(reference[-20:,1])
     ratio = calc_cubic_interpolation(absorption, reference, material['zero_absorption_width'])
@@ -703,9 +740,11 @@ def calc_absorption(material, filter_width = 0):
     
     # Calculate the Absorption 
     sigma_a = np.abs(np.log(reference[:,1]/absorption[:,1]))/(material["N_dop"]*1e-6*material["length"]*1e2)
-    sigma_a = savgol_filter(sigma_a, 20, 3)
+
+    if savgol_filter_width > savgol_filter_order:
+        sigma_a = savgol_filter(sigma_a, savgol_filter_width, savgol_filter_order)
     
-    return sigma_a, absorption, reference
+    return sigma_a, absorption, reference, ratio
 
 def calc_partition_function(degeneracies, energies, kbT):
     if not hasattr(degeneracies, "__len__"):
@@ -798,8 +837,8 @@ def get_overlap_lengths(arr):
 
 def average_MCcumber_FL(lambdas, material, FL_array, MC_array):
     array_FL, array_MC = [np.zeros_like(lambdas) for _ in range(2)]
-    FL_min = material["FL_min"] if "FL_min" in material else 980
-    MC_max = material["MC_max"] if "MC_max" in material else 990
+    FL_min = material["FL_min"] if "FL_min" in material else material["ZPL"]*1e9 - 10
+    MC_max = material["MC_max"] if "MC_max" in material else material["ZPL"]*1e9 + 10
     sliceFL = find_interval(lambdas, FL_min, 1200)
     sliceMC = find_interval(lambdas, 800, MC_max)
 
