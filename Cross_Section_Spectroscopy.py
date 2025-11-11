@@ -1,4 +1,4 @@
-import os
+import os, glob
 import re
 import sys
 import json
@@ -115,8 +115,9 @@ class App(customtkinter.CTk):
         #switches
         self.config_title = App.create_label(frame, text="Configure Simulation", font=customtkinter.CTkFont(size=16, weight="bold"), row=10, column=0, padx=20, pady=(20, 5),sticky=None)
         self.use_McCumber   = App.create_switch(frame, text="Use McCumber", command=None,  column=0, row=11, padx=20)
-        self.crystal_button   = App.create_switch(frame, text="Config Crystal", command=lambda: self.toggle_sidebar_window(self.crystal_button, self.crystal_widgets),  column=0, row=12, padx=20)
-        self.absorption_button   = App.create_switch(frame, text="Config Absorption", command=lambda: self.toggle_sidebar_window(self.absorption_button, self.absorption_widgets),  column=0, row=13, padx=20)
+        self.use_Fuchtbauer   = App.create_switch(frame, text="Use Füchtbauer", command=None,  column=0, row=12, padx=20)
+        self.crystal_button   = App.create_switch(frame, text="Config Crystal", command=lambda: self.toggle_sidebar_window(self.crystal_button, self.crystal_widgets),  column=0, row=13, padx=20)
+        self.absorption_button   = App.create_switch(frame, text="Config Absorption", command=lambda: self.toggle_sidebar_window(self.absorption_button, self.absorption_widgets),  column=0, row=14, padx=20)
 
 
         #Settings section
@@ -145,6 +146,7 @@ class App(customtkinter.CTk):
         self.show_title.select()
         self.show_grid.select()
         self.use_McCumber.select()
+        self.use_Fuchtbauer.select()
 
         self.load_settings_frame()
 
@@ -259,24 +261,26 @@ class App(customtkinter.CTk):
     def load_absorption_sidebar(self):
         row = 10
         self.absorption_title = App.create_label(self.settings_frame, text="Absorption Settings", font=customtkinter.CTkFont(size=16, weight="bold"), row=row, column=0, columnspan=5, padx=20, pady=(20, 5),sticky=None)
-        self.zero_bandwidth, self.zero_bandwidth_label = App.create_entry(self.settings_frame, column=1, row=row+1, columnspan=2, width=110, text="zero abs. bandwidth", textwidget=True)
-        self.fourier_filter, self.fourier_filter_label = App.create_slider(self.settings_frame, from_=0, to=1, column=1, row=row+2, columnspan=2, width=110-30, padx=(10,40), text="fourier filter", init_val=0, number_of_steps=100, textwidget=True)
-        self.savgol_filter, self.savgol_filter_label = App.create_slider(self.settings_frame, from_=0, to=50, column=1, row=row+3, columnspan=2, width=110-30, padx=(10,40), text="Savitzky Golay filter", init_val=20, number_of_steps=50, textwidget=True)
+        self.zero_bandwidth, self.zero_bandwidth_label = App.create_entry(self.settings_frame, column=1, row=row+1, columnspan=2, width=150, text="zero abs. bandwidth", textwidget=True)
+        self.fourier_filter, self.fourier_filter_label = App.create_slider(self.settings_frame, from_=0, to=1, column=1, row=row+2, columnspan=2, width=150-50, padx=(10,40), text="fourier filter", init_val=0, number_of_steps=100, textwidget=True)
+        self.savgol_filter, self.savgol_filter_label = App.create_slider(self.settings_frame, from_=0, to=50, column=1, row=row+3, columnspan=2, width=150-50, padx=(10,40), text="Savitzky Golay filter", init_val=20, number_of_steps=50, textwidget=True)
+        self.lower_zero_index, self.lower_zero_index_label = App.create_slider(self.settings_frame, from_=300, to=10000, column=1, row=row+4, columnspan=2, width=150-50, padx=(10,40), text="lower zero index", init_val=300, number_of_steps=100, textwidget=True)
+        self.higher_zero_index, self.higher_zero_index_label = App.create_slider(self.settings_frame, from_=300, to=10000, column=1, row=row+5, columnspan=2, width=150-50, padx=(10,40), text="higher zero index", init_val=10000, number_of_steps=100, textwidget=True)
 
-        for i, (widget, variable, label) in enumerate(zip(["fourier_filter", "savgol_filter"],
-                                                                    ["filter_var", "savgol_var"],
-                                                                    ["filter_lab", "savgol_lab"]),start=2):
+        for i, (widget, variable, label) in enumerate(zip(["fourier_filter", "savgol_filter", "lower_zero_index", "higher_zero_index"],
+                                                                    ["filter_var", "savgol_var", "lower_zero_index_var", "higher_zero_index_var"],
+                                                                    ["filter_lab", "savgol_lab", "lower_zero_index_lab", "higher_zero_index_lab"]),start=2):
             slider = getattr(self, widget)
             slider.configure(command=lambda value, strvar=variable: self.update_slider_value(value, strvar))
             setattr(self, variable, customtkinter.StringVar())
-            setattr(self, label, App.create_label(self.settings_frame, textvariable=getattr(self, variable), column=1, row=row+i, width=30, padx=(10+110-30,10), anchor='e', sticky='e'))
+            setattr(self, label, App.create_label(self.settings_frame, textvariable=getattr(self, variable), column=1, row=row+i, width=50, padx=(10+150-50,10), anchor='e', sticky='e'))
             getattr(self, variable).set(str(round(slider.get(),2)))
 
 
         for widget in [self.zero_bandwidth]:
             widget.bind("<KeyRelease>", lambda val: self.update_material_dictionary(val))
 
-        self.absorption_widgets = ["absorption_title", "zero_bandwidth", "fourier_filter", "savgol_filter", "zero_bandwidth_label", "fourier_filter_label", "savgol_filter_label", "filter_lab", "savgol_lab"]
+        self.absorption_widgets = ["absorption_title", "zero_bandwidth", "fourier_filter", "savgol_filter", "zero_bandwidth_label", "fourier_filter_label", "savgol_filter_label", "filter_lab", "savgol_lab", "lower_zero_index", "higher_zero_index", "lower_zero_index_label", "higher_zero_index_label"]
         self.toggle_sidebar_window(self.absorption_button, self.absorption_widgets)
 
     def update_material_dictionary(self, value):
@@ -284,6 +288,7 @@ class App(customtkinter.CTk):
         self.material_dict["length"] = float(self.thickness.get())*1e-3
         self.material_dict["tau_f"] = float(self.tau_f.get())*1e-3
         self.material_dict["zero_absorption_width"] = int(self.zero_bandwidth.get())
+        self.material_dict["zero_absorption_wavelength"] = (int(self.lower_zero_index.get()), int(self.higher_zero_index.get()))
 
     # load the material
     def load_material(self, material):
@@ -291,6 +296,7 @@ class App(customtkinter.CTk):
         with open(path, "r") as file:
             self.material_dict = json.load(file)
 
+        self.material_dict.setdefault("zero_absorption_wavelength", (0, np.inf))
         self.doping.reinsert(self.material_dict["N_dop"]*1e-6)
         self.thickness.reinsert(str(self.material_dict["length"]*1e3))
         self.tau_f.reinsert(str(self.material_dict["tau_f"]*1e3))
@@ -359,32 +365,69 @@ class App(customtkinter.CTk):
 
         sigma_a, absorption, reference, ratio = calc_absorption(self.material_dict, filter_width=float(self.fourier_filter.get()), savgol_filter_width=int(self.savgol_filter.get()))
 
-        self.ax.plot(absorption[:,0], absorption[:,1], label="absorption")
-        self.ax.plot(reference[:,0], reference[:,1], label="reference")
-        self.ax.plot(reference[:,0], reference[:,1]/ratio, label="reference raw", c="tab:orange", lw=0.8, alpha=0.7)
-        self.ax.plot(absorption[:,0], sigma_a/(np.max(sigma_a)/np.max(reference[:,1])), label="absorption cross section", c="tab:green", lw=0.8)
+        self.line_abs, = self.ax.plot(absorption[:,0], absorption[:,1], label="absorption")
+        self.line_ref, = self.ax.plot(reference[:,0], reference[:,1], label="reference")
+        self.line_ref_raw, =self.ax.plot(reference[:,0], reference[:,1]/ratio, label="reference raw", c="tab:orange", lw=0.8, alpha=0.7)
+        self.line_sigma, = self.ax.plot(sigma_a[:,0], sigma_a[:,1]/(np.max(sigma_a[:,1])/np.max(reference[:,1])), label="absorption cross section", c="tab:green", lw=0.8)
 
         self.ax.set_xlabel("wavelength in nm")
         self.ax.set_ylabel("absorption in a.u.")
         self.ax.legend()
 
+
         if self.show_title.get(): self.ax.set_title(f"absorption of {self.material_dict['name']}")
 
+        self.higher_zero_index.configure(from_=absorption[0,0], to=absorption[-1,0])
+        self.lower_zero_index.configure(from_=absorption[0,0], to=absorption[-1,0])
+        if self.higher_zero_index.get() > absorption[-1,0]: self.higher_zero_index.set(absorption[-1,0])
+        if self.lower_zero_index.get() < absorption[0,0]: self.lower_zero_index.set(absorption[0,0]) 
+
+        # vlines stored for later updates
+        self.vline_low = self.ax.axvline(self.lower_zero_index.get(), color='red', linestyle='--', lw=0.8)
+        self.vline_high = self.ax.axvline(self.higher_zero_index.get(), color='red', linestyle='--', lw=0.8)
+
         self.canvas.draw()
+
+    def update_absorption_plot(self):
+        sigma_a, absorption, reference, ratio = calc_absorption(
+            self.material_dict,
+            filter_width=float(self.fourier_filter.get()),
+            savgol_filter_width=int(self.savgol_filter.get())
+        )
+
+        # update plot data
+        self.line_abs.set_data(absorption[:,0], absorption[:,1])
+        self.line_ref.set_data(reference[:,0], reference[:,1])
+        self.line_ref_raw.set_data(reference[:,0], reference[:,1]/ratio)
+        self.line_sigma.set_data(sigma_a[:,0],
+                                sigma_a[:,1]/(np.max(sigma_a[:,1])/np.max(reference[:,1])))
+
+        # update vertical lines
+        val_low  = float(self.lower_zero_index.get())
+        val_high = float(self.higher_zero_index.get())
+
+        self.vline_low.set_xdata([val_low, val_low])
+        self.vline_high.set_xdata([val_high, val_high])
+
+        # refresh only the artists (faster than full draw)
+        self.ax.relim()
+        self.ax.autoscale_view()
+        self.canvas.draw_idle()
 
     def cross_sections_plot(self):
         self.clear_axis()
         # absorption_depth in cm, accounts for reabsorption in the crystal
-        subfolder = self.material_dict["date"] + '_' + self.material_dict["name"]
-        absorp_name = subfolder + '_Absorption.txt'
-        lambdas = np.genfromtxt(os.path.join(Standard_path, "measurements", subfolder, absorp_name), skip_header=2, delimiter=",")[:,0]
 
         sigma_a = calc_absorption(self.material_dict, filter_width=float(self.fourier_filter.get()), savgol_filter_width=int(self.savgol_filter.get()))[0]
-        Fluo = calc_fluorescence(self.material_dict)[0]
-        sigma_e = Fuchtbauer_Ladenburg(Fluo, self.material_dict, sigma_a=sigma_a, absorption_depth=self.absorption_depth)
 
-        self.ax.plot(lambdas, sigma_a, label=f"$\\sigma_a$ {self.material_dict['name']}")
-        self.ax.plot(Fluo[:,0], sigma_e, label="$\\sigma_e$ FL")
+        plot_list = [sigma_a]
+        plot_list_labels = [f"$\\sigma_a$ {self.material_dict['name']}"]
+
+        if self.use_Fuchtbauer.get():
+            Fluo = calc_fluorescence(self.material_dict)[0]
+            sigma_e = Fuchtbauer_Ladenburg(Fluo, self.material_dict, sigma_a=sigma_a[:,1], absorption_depth=self.absorption_depth)
+            plot_list += [sigma_e]
+            plot_list_labels += [f"$\\sigma_e$ Füchtbauer"]
 
         self.ax.set_xlabel("wavelength in nm")
         self.ax.set_ylabel("cross sections in cm²")
@@ -395,15 +438,20 @@ class App(customtkinter.CTk):
             E_u = self.material_dict.get("energy_upper_level", [1e-2/self.material_dict["ZPL"]])
             E_l = self.material_dict.get("energy_lower_level", [0])
 
-            sigma_e_McCumber = McCumber_relation(E_l, E_u, sigma_a, lambdas*1e-7, thermal_energy)
-            self.ax.plot(lambdas, sigma_e_McCumber, label="$\\sigma_e$ McCumber")
-            self.ax.set_ylim(-1e-21,1.5*np.max(sigma_a))
+            sigma_e_McCumber = McCumber_relation(E_l, E_u, sigma_a, thermal_energy)
+            plot_list += [sigma_e_McCumber]
+            plot_list_labels += ["$\\sigma_e$ McCumber"]
+            self.ax.set_ylim(-1e-21,1.5*np.max(sigma_a[:,1]))
 
-            sigma_e_average = average_MCcumber_FL(lambdas, self.material_dict, sigma_e, sigma_e_McCumber)
-            self.ax.plot(lambdas, sigma_e_average, label="$\\sigma_e$ average")
+            if self.use_Fuchtbauer.get():
+                sigma_e_average = average_MCcumber_FL(sigma_e[:,0], self.material_dict, sigma_e, sigma_e_McCumber)
+                sigma_a_average = McCumber_relation_inverse(E_l, E_u, sigma_e_average, thermal_energy)
+                plot_list += [sigma_e_average, sigma_a_average]
+                plot_list_labels += ["$\\sigma_e$ average", "$\\sigma_a$ average"]
 
-            sigma_a_average = McCumber_relation_inverse(E_l, E_u, sigma_e_average, lambdas*1e-7, thermal_energy)
-            self.ax.plot(lambdas, sigma_a_average, label="$\\sigma_a$ average")
+
+        for data, label in zip(plot_list, plot_list_labels):
+            self.ax.plot(data[:,0], data[:,1], label=label)
 
         self.ax.legend()
         self.canvas.draw()
@@ -521,6 +569,9 @@ class App(customtkinter.CTk):
     def update_slider_value(self, value, strvar_name):
         variable = getattr(self, strvar_name)
         variable.set(str(round(value,2)))
+
+        self.update_material_dictionary(value)
+        self.update_absorption_plot()
 
     def update_canvas_size(self, canvas_ratio):
         canvas_width = float(self.canvas_width.get())
@@ -677,45 +728,117 @@ def calc_fluorescence(material, filter_width=0, Do_Plots=True):
 
     return Fluo, Fluo_low, Fluo_high
 
-def calc_cubic_interpolation(absorption, reference, zero_absorption_width):
-    ## cubic fit of spectrum start and end
-    w = zero_absorption_width
+# def calc_cubic_interpolation(absorption, reference, zero_absorption_width):
+#     ## cubic fit of spectrum start and end
+#     w = zero_absorption_width
     
+#     if w == 0:
+#         return np.mean(absorption[-10:,1]) / np.mean(reference[-10:,1])
+    
+#     y1= np.mean(absorption[:int(w/5),1]) / np.mean(reference[:int(w/5),1])
+#     y2= np.mean(absorption[int(w*4/5):w,1]) / np.mean(reference[int(w*4/5):w,1])
+#     y3= np.mean(absorption[-w:-int(w*4/5):,1]) / np.mean(reference[-w:-int(w*4/5):,1])
+#     y4= np.mean(absorption[-int(w/5):,1]) / np.mean(reference[-int(w/5):,1])
+    
+#     x1= np.mean(absorption[:int(w/5),0])
+#     x2= np.mean(absorption[int(w*4/5):w,0])
+#     x3= np.mean(absorption[-w:-int(w*4/5):,0])
+#     x4= np.mean(absorption[-int(w/5):,0])
+    
+#     x_values = np.array([x1,x2,x3,x4])
+#     y_values = np.array([y1,y2,y3,y4])
+    
+#     print(x_values, y_values)
+#     # Construct the Vandermonde matrix
+#     A = np.vander(x_values, 4)  # 4 columns for cubic polynomial
+    
+#     # Solve the system of equations
+#     coefficients = np.linalg.solve(A, y_values)
+#     # coefficients = [1,1,1,1]
+    
+#     polynomial_fit = np.polynomial.Polynomial(coefficients[::-1])
+    
+#     return polynomial_fit(absorption[:,0])
+
+def calc_cubic_interpolation(absorption, reference, zero_absorption_width, mid_lambda1=0, mid_lambda2=np.inf):
+    """
+    Perform cubic interpolation between two spectral regions centered around mid_idx1 and mid_idx2.
+
+    Parameters
+    ----------
+    absorption : np.ndarray
+        2D array with columns [x, y_absorption].
+    reference : np.ndarray
+        2D array with columns [x, y_reference].
+    zero_absorption_width : int
+        Number of pixels around each center index used for interpolation regions.
+    mid_lambda1 : float, optional
+        Center wavelength for the first region (default 0, start of array).
+    mid_lambda2 : float, optional
+        Center wavelength for the second region (default np.inf, end of array).
+
+    Returns
+    -------
+    np.ndarray
+        Interpolated values of the cubic polynomial evaluated over absorption[:,0].
+    """
+    w = zero_absorption_width
+    mid_idx1 = np.argmin(np.abs(absorption[:,0] - mid_lambda1))
+    mid_idx2 = np.argmin(np.abs(absorption[:,0] - mid_lambda2)) if mid_lambda2 != np.inf else len(absorption) - 1
+    print(mid_lambda2)
+
+    # Handle default special case: only use end section if w == 0
     if w == 0:
         return np.mean(absorption[-10:,1]) / np.mean(reference[-10:,1])
-    
-    y1= np.mean(absorption[:int(w/5),1]) / np.mean(reference[:int(w/5),1])
-    y2= np.mean(absorption[int(w*4/5):w,1]) / np.mean(reference[int(w*4/5):w,1])
-    y3= np.mean(absorption[-w:-int(w*4/5):,1]) / np.mean(reference[-w:-int(w*4/5):,1])
-    y4= np.mean(absorption[-int(w/5):,1]) / np.mean(reference[-int(w/5):,1])
-    
-    x1= np.mean(absorption[:int(w/5),0])
-    x2= np.mean(absorption[int(w*4/5):w,0])
-    x3= np.mean(absorption[-w:-int(w*4/5):,0])
-    x4= np.mean(absorption[-int(w/5):,0])
-    
-    x_values = np.array([x1,x2,x3,x4])
-    y_values = np.array([y1,y2,y3,y4])
-    
-    print(x_values, y_values)
-    # Construct the Vandermonde matrix
-    A = np.vander(x_values, 4)  # 4 columns for cubic polynomial
-    
-    # Solve the system of equations
+
+    # Convert negative indices (like -1) to actual positions
+    n = len(absorption)
+    if mid_idx1 < 0:
+        mid_idx1 = n + mid_idx1
+    if mid_idx2 < 0:
+        mid_idx2 = n + mid_idx2
+
+    # Define start and end slices for both regions
+    region1 = slice(max(0, mid_idx1 - w//2), min(n, mid_idx1 + w//2))
+    region2 = slice(max(0, mid_idx2 - w//2), min(n, mid_idx2 + w//2))
+
+    # Subdivide each region into two averaged sections (for total of 4 interpolation points)
+    def region_points(region):
+        idx = np.arange(region.start, region.stop)
+        sublen = max(1, len(idx) // 5)
+        y1 = np.mean(absorption[idx[:sublen],1]) / np.mean(reference[idx[:sublen],1])
+        y2 = np.mean(absorption[idx[-sublen:],1]) / np.mean(reference[idx[-sublen:],1])
+        x1 = np.mean(absorption[idx[:sublen],0])
+        x2 = np.mean(absorption[idx[-sublen:],0])
+        return [(x1, y1), (x2, y2)]
+
+    points = region_points(region1) + region_points(region2)
+    x_values, y_values = np.array(points).T
+
+    # Solve cubic polynomial
+    A = np.vander(x_values, 4)
     coefficients = np.linalg.solve(A, y_values)
-    # coefficients = [1,1,1,1]
-    
-    polynomial_fit = np.polynomial.Polynomial(coefficients[::-1])
-    
-    return polynomial_fit(absorption[:,0])
+    poly = np.polynomial.Polynomial(coefficients[::-1])
+
+    return poly(absorption[:,0])
 
 def calc_absorption(material, filter_width = 0, savgol_filter_width = 20, savgol_filter_order=3):
     subfolder = material["date"] + '_' + material["name"]
+    path = os.path.join(Standard_path, "measurements", subfolder)
     absorp_name = subfolder + '_Absorption'
     absorp_ref_name = subfolder + '_Absorption_reference'
-    absorption = np.genfromtxt(os.path.join(Standard_path, "measurements", subfolder, absorp_name + '.txt'), skip_header=2, delimiter=",")
-    reference = np.genfromtxt(os.path.join(Standard_path, "measurements", subfolder, absorp_ref_name + '.txt'), skip_header=2, delimiter=",")
-        
+
+    absorption_files = [f for f in glob.glob(os.path.join(path, '*absorption*.txt')) if 'reference' not in f.lower()]
+    reference_files = glob.glob(os.path.join(path, '*reference*.txt'))
+
+    load_txt = lambda f: np.genfromtxt(f, skip_header=2, delimiter=",")
+
+    absorption_spectra = [load_txt(f) for f in absorption_files]
+    reference_spectra = [load_txt(f) for f in reference_files]
+
+    absorption = join_spectra(absorption_spectra) if len(absorption_spectra) > 1 else absorption_spectra[0]
+    reference  = join_spectra(reference_spectra)  if len(reference_spectra)  > 1 else reference_spectra[0]
+
     # Assuming: absorption[:,0] and reference[:,0] are x-values
     x_min = max(absorption[:,0].min(), reference[:,0].min())
     x_max = min(absorption[:,0].max(), reference[:,0].max())
@@ -732,8 +855,9 @@ def calc_absorption(material, filter_width = 0, savgol_filter_width = 20, savgol
     reference = fourier_filter(reference, filter_width = filter_width)
     absorption = fourier_filter(absorption, filter_width = filter_width)
     
+    mid_wavelength = material.get("zero_absorption_wavelength")
     # ratio = np.mean(absorption[-20:,1]) / np.mean(reference[-20:,1])
-    ratio = calc_cubic_interpolation(absorption, reference, material['zero_absorption_width'])
+    ratio = calc_cubic_interpolation(absorption, reference, material['zero_absorption_width'], mid_lambda1=mid_wavelength[0], mid_lambda2=mid_wavelength[1])
     
     # print(ratio)
     reference[:,1] *= ratio
@@ -744,7 +868,47 @@ def calc_absorption(material, filter_width = 0, savgol_filter_width = 20, savgol
     if savgol_filter_width > savgol_filter_order:
         sigma_a = savgol_filter(sigma_a, savgol_filter_width, savgol_filter_order)
     
-    return sigma_a, absorption, reference, ratio
+    return np.vstack([absorption[:,0], sigma_a]).T, absorption, reference, ratio
+
+def join_spectra(spectra_list):
+    # Join multiple spectra into one, removing overlapping regions by averaging
+    if len(spectra_list) == 0:
+        return np.array([])
+
+    combined_spectrum = spectra_list[0]
+
+    for next_spectrum in spectra_list[1:]:
+        # Find overlapping region
+        overlap_start = max(combined_spectrum[0,0], next_spectrum[0,0])
+        overlap_end = min(combined_spectrum[-1,0], next_spectrum[-1,0])
+
+        if overlap_start < overlap_end:
+            # Indices for overlapping region
+            combined_indices = np.where((combined_spectrum[:,0] >= overlap_start) & (combined_spectrum[:,0] <= overlap_end))[0]
+            next_indices = np.where((next_spectrum[:,0] >= overlap_start) & (next_spectrum[:,0] <= overlap_end))[0]
+
+            # Average overlapping region
+            # x and y values from both spectra in the overlap region
+            x1, y1 = combined_spectrum[combined_indices, 0], combined_spectrum[combined_indices, 1]
+            x2, y2 = next_spectrum[next_indices, 0], next_spectrum[next_indices, 1]
+
+            # interpolate y2 onto x1 grid
+            y2_interp = np.interp(x1, x2, y2)
+
+            # average the y-values on the same x-grid
+            averaged_overlap = np.column_stack([x1, (y1 + y2_interp) / 2])
+
+            # Non-overlapping parts
+            combined_non_overlap = combined_spectrum[combined_spectrum[:,0] < overlap_start]
+            next_non_overlap = next_spectrum[next_spectrum[:,0] > overlap_end]
+
+            # Combine all parts
+            combined_spectrum = np.vstack([combined_non_overlap, averaged_overlap, next_non_overlap])
+        else:
+            # No overlap, just concatenate
+            combined_spectrum = np.vstack([combined_spectrum, next_spectrum])
+
+    return combined_spectrum
 
 def calc_partition_function(degeneracies, energies, kbT):
     if not hasattr(degeneracies, "__len__"):
@@ -775,25 +939,27 @@ def calc_Z_lower_upper(energies_lower, energies_upper, kbT):
 
     return Z_lower, Z_upper, ZPL
 
-def McCumber_relation(energies_lower, energies_upper, sigma_a, lambdas, kbT):
+def McCumber_relation(energies_lower, energies_upper, sigma_a, kbT):
     # Calculate the emission cross section with the McCumber relation for a given absorption spectrum and the energy levels 
     # lambdas should be given in cm
+    lambdas = sigma_a[:,0]*1e-7   # units: cm
     Z_lower, Z_upper, ZPL = calc_Z_lower_upper(energies_lower, energies_upper, kbT)
 
     # Calculate the emission cross section
-    sigma_e = Z_lower/Z_upper * np.exp((ZPL-hc/lambdas)/kbT) * sigma_a
+    sigma_e = Z_lower/Z_upper * np.exp((ZPL-hc/lambdas)/kbT) * sigma_a[:,1]
     
-    return sigma_e
+    return np.vstack([sigma_a[:,0], sigma_e]).T
 
-def McCumber_relation_inverse(energies_lower, energies_upper, sigma_e, lambdas, kbT):
+def McCumber_relation_inverse(energies_lower, energies_upper, sigma_e, kbT):
     # Calculate the absorption cross section with the McCumber relation for a given emission spectrum and the energy levels 
     # lambdas should be given in cm
+    lambdas = sigma_e[:,0]*1e-7   # units: cm
     Z_lower, Z_upper, ZPL = calc_Z_lower_upper(energies_lower, energies_upper, kbT)
 
     # Calculate the absorption cross section
-    sigma_a = Z_upper/Z_lower * np.exp((-ZPL+hc/lambdas)/kbT) * sigma_e
+    sigma_a = Z_upper/Z_lower * np.exp((-ZPL+hc/lambdas)/kbT) * sigma_e[:,1]
     
-    return sigma_a
+    return np.vstack([sigma_e[:,0], sigma_a]).T
 
 def beta_eq(sigma_a, sigma_e):
     return sigma_a / (sigma_a + sigma_e)
@@ -816,7 +982,7 @@ def Fuchtbauer_Ladenburg(flourescence, material, sigma_a = None, absorption_dept
     
     sigma_e = lambdas**2 / (8*np.pi*n**2*tau) * g 
     
-    return sigma_e
+    return np.vstack([lambdas*1e7, sigma_e]).T
 
 def find_interval(lambdas, lmin, lmax):
     index_min = np.argmin(np.abs(lambdas-lmin))
@@ -842,8 +1008,8 @@ def average_MCcumber_FL(lambdas, material, FL_array, MC_array):
     sliceFL = find_interval(lambdas, FL_min, 1200)
     sliceMC = find_interval(lambdas, 800, MC_max)
 
-    array_FL[sliceFL] += FL_array[sliceFL]
-    array_MC[sliceMC] += MC_array[sliceMC]
+    array_FL[sliceFL] += FL_array[sliceFL,1]
+    array_MC[sliceMC] += MC_array[sliceMC,1]
 
     arrays = [array_FL, array_MC]
     nonzero_mask = np.vstack(arrays) != 0
@@ -869,7 +1035,7 @@ def average_MCcumber_FL(lambdas, material, FL_array, MC_array):
     stacked = np.vstack(arrays)
     average = np.sum(stacked * nonzero_mask, axis=0)
 
-    return average
+    return np.vstack([lambdas, average]).T
 
 if __name__ == "__main__":
 

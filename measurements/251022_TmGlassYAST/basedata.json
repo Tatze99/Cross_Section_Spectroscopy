@@ -1,0 +1,13 @@
+{
+    "name": "TmGlassYAST",
+    "date": "251022",
+    "length": 0.5e-2,
+    "tau_f": 1e-3,
+    "N_dop": 2.67e26,
+    "density": 1e3,
+    "n": 1.5,
+    "temperature": 295,
+    "correct_temp": false,
+    "zero_absorption_width": 100,
+    "ZPL": 800e-9
+}
