@@ -9,5 +9,5 @@
     "temperature": 295,
     "correct_temp": false,
     "zero_absorption_width": 100,
-    "ZPL": 800e-9
+    "ZPL": 1200e-9
 }

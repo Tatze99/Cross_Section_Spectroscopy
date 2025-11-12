@@ -46,14 +46,14 @@ class App(customtkinter.CTk):
 
         set_plot_params()
         self.initialize_variables()
+        self.setup_plot_area()
         self.initialize_ui_images()
         self.initialize_ui()
 
         self.toplevel_window = {'Plot Settings': None,
                                 'Legend Settings': None}
 
-        self.setup_plot_area()
-        self.load_material(self.materials[0])
+        self.load_settings_frame()
 
         self.canvas_width.bind("<KeyRelease>", lambda val: self.update_canvas_size(self.canvas_ratio_list[self.canvas_ratio.get()]))
         self.canvas_height.bind("<KeyRelease>", lambda val: self.update_canvas_size(self.canvas_ratio_list[self.canvas_ratio.get()]))
@@ -90,12 +90,7 @@ class App(customtkinter.CTk):
 
         App.create_label(self.sidebar_frame, text="CSS v."+version_number, font=customtkinter.CTkFont(size=20, weight="bold"),row=0, column=0, padx=20, pady=(10,15), sticky=None)
         
-        self.tabview = customtkinter.CTkTabview(self, width=250, command=lambda: self.toggle_toolbar(self.tabview.get()))
-        self.tabview.grid(row=3, column=1, padx=(10, 10), pady=(20, 0), columnspan=2, sticky="nsew", rowspan=10)
-        self.tabview.add("Show Plots")
-        self.tabview.add("Settings")
-        self.tabview.tab("Show Plots").columnconfigure(0, weight=1)
-        self.tabview.tab("Show Plots").rowconfigure(0, weight=1)
+        
 
         #buttons
         
@@ -118,6 +113,7 @@ class App(customtkinter.CTk):
         self.use_Fuchtbauer   = App.create_switch(frame, text="Use Füchtbauer", command=None,  column=0, row=12, padx=20)
         self.crystal_button   = App.create_switch(frame, text="Config Crystal", command=lambda: self.toggle_sidebar_window(self.crystal_button, self.crystal_widgets),  column=0, row=13, padx=20)
         self.absorption_button   = App.create_switch(frame, text="Config Absorption", command=lambda: self.toggle_sidebar_window(self.absorption_button, self.absorption_widgets),  column=0, row=14, padx=20)
+        self.McCumber_button   = App.create_switch(frame, text="Config McCumber", command=lambda: self.toggle_sidebar_window(self.McCumber_button, self.McCumber_widgets),  column=0, row=15, padx=20)
 
 
         #Settings section
@@ -148,8 +144,6 @@ class App(customtkinter.CTk):
         self.use_McCumber.select()
         self.use_Fuchtbauer.select()
 
-        self.load_settings_frame()
-
     # initialize all widgets on the settings frame
     def load_settings_frame(self):
         self.settings_frame = customtkinter.CTkFrame(self, width=1, height=600, corner_radius=0)
@@ -159,6 +153,8 @@ class App(customtkinter.CTk):
 
         self.load_crystal_sidebar()
         self.load_absorption_sidebar()
+        self.load_McCumber_sidebar()
+        self.load_material(self.materials[0])
 
 
     def create_label(self, row, column, width=20, text=None, anchor='e', sticky='e', textvariable=None, padx=(5,5), image=None, pady=None, font=None, columnspan=1, fg_color=None, **kwargs):
@@ -212,17 +208,53 @@ class App(customtkinter.CTk):
 
         return optionmenu
     
-    def create_slider(self, from_, to, row, column, width=200, text=None, init_val=None, command=None, columnspan=1, number_of_steps=1000, padx = 10, pady=5, sticky='w', textwidget=False,**kwargs):
-        slider = customtkinter.CTkSlider(self, from_=from_, to=to, width=width, command=command, number_of_steps=number_of_steps)
+    def create_slider(self, from_, to, row, column, width=200, sliderValue_width=50, text=None, init_val=None, command=None, showSliderValue=False, columnspan=1, number_of_steps=1000, padx = 10, pady=5, sticky='w', textwidget=False,**kwargs):
+        """
+        Create a CTkSlider with optional text label and optional live value display.
+
+        If showSliderValue=True:
+        - The slider width is reduced by SliderValue_width.
+        - A numeric label is placed in the same column to the right.
+        - The label updates automatically as the slider moves.
+        - Returns (slider, label, variable)
+        """
+
+        # if slider value display is enabled, bind a variable
+        variable = customtkinter.DoubleVar(value=init_val if init_val is not None else from_) if showSliderValue else None
+
+        # --- Create slider ---
+        effective_width = width - sliderValue_width if showSliderValue else width
+        slider = customtkinter.CTkSlider(self, from_=from_, to=to, width=effective_width, command=command, variable=variable, number_of_steps=number_of_steps)
         slider.grid(column=column, row=row, columnspan=columnspan, padx=padx, pady=pady, sticky=sticky, **kwargs)
+        returns = [slider]
+
         if init_val is not None:
             slider.set(init_val)
-        if text is not None:
-            slider_label = App.create_label(self, text=text, column=column-1, row=row, width=20, anchor='e')
-            if textwidget == True:
-                return (slider, slider_label)
 
-        return slider
+        # --- Optional text label on the left ---
+        if text is not None:
+            slider_label = App.create_label(self, text=text, column=column - 1, row=row, width=20, anchor='e')
+            if textwidget:
+                returns.append(slider_label)
+
+        # --- Optional numeric value label on the right ---
+        if showSliderValue:
+            value_label = customtkinter.CTkLabel(self, text=f"{round(slider.get(), 2)}", width=sliderValue_width, anchor='e')
+            value_label.grid(column=column + columnspan-1, row=row, padx=(10+width-sliderValue_width, 10), sticky='e')
+
+            # live update on slider movement
+            def update_value_label(*_):
+                value_label.configure(text=f"{round(variable.get(), 2)}")
+                if command:
+                    command(variable.get())
+
+            slider.configure(command=lambda v: variable.set(float(v)))
+            variable.trace_add("write", update_value_label)
+            returns.append(value_label)
+            returns.append(variable)
+
+        # Unpack if only one element, else return tuple
+        return returns[0] if len(returns) == 1 else tuple(returns)
      
     def create_table(self,  width, row, column, sticky=None, rowspan=1, **kwargs):
         text_widget = customtkinter.CTkTextbox(self, width = width, padx=10, pady=5)
@@ -247,10 +279,10 @@ class App(customtkinter.CTk):
     # Load the sidebar
     def load_crystal_sidebar(self):
         row = 0
-        self.crystal_title = App.create_label(self.settings_frame, text="Crystal Settings", font=customtkinter.CTkFont(size=16, weight="bold"), row=row, column=0, columnspan=5, padx=20, pady=(20, 5),sticky=None)
-        self.doping, self.doping_label = App.create_entry(self.settings_frame, column=1, row=row+1, columnspan=2, width=110, text="doping [cm⁻³]", textwidget=True)
-        self.thickness, self.thickness_label = App.create_entry(self.settings_frame,column=1, row=row+2, columnspan=2, width=110, text="thickness [mm]", textwidget=True)
-        self.tau_f, self.tau_f_label = App.create_entry(self.settings_frame,column=1, row=row+3, columnspan=2, width=110, text="lifetime τ [ms]", textwidget=True)
+        self.crystal_title = App.create_label(self.settings_frame, text="Crystal Settings", font=customtkinter.CTkFont(size=16, weight="bold"), row=row, column=0, columnspan=4, padx=20, pady=(20, 5),sticky=None)
+        self.doping, self.doping_label = App.create_entry(self.settings_frame, column=1, row=row+1, width=110, text="doping [cm⁻³]", textwidget=True)
+        self.thickness, self.thickness_label = App.create_entry(self.settings_frame,column=1, row=row+2, width=110, text="thickness [mm]", textwidget=True)
+        self.tau_f, self.tau_f_label = App.create_entry(self.settings_frame,column=1, row=row+3, width=110, text="lifetime τ [ms]", textwidget=True)
 
         for widget in [self.doping, self.thickness, self.tau_f]:
             widget.bind("<KeyRelease>", lambda val: self.update_material_dictionary(val))
@@ -260,28 +292,27 @@ class App(customtkinter.CTk):
 
     def load_absorption_sidebar(self):
         row = 10
-        self.absorption_title = App.create_label(self.settings_frame, text="Absorption Settings", font=customtkinter.CTkFont(size=16, weight="bold"), row=row, column=0, columnspan=5, padx=20, pady=(20, 5),sticky=None)
-        self.zero_bandwidth, self.zero_bandwidth_label = App.create_entry(self.settings_frame, column=1, row=row+1, columnspan=2, width=150, text="zero abs. bandwidth", textwidget=True)
-        self.fourier_filter, self.fourier_filter_label = App.create_slider(self.settings_frame, from_=0, to=1, column=1, row=row+2, columnspan=2, width=150-50, padx=(10,40), text="fourier filter", init_val=0, number_of_steps=100, textwidget=True)
-        self.savgol_filter, self.savgol_filter_label = App.create_slider(self.settings_frame, from_=0, to=50, column=1, row=row+3, columnspan=2, width=150-50, padx=(10,40), text="Savitzky Golay filter", init_val=20, number_of_steps=50, textwidget=True)
-        self.lower_zero_index, self.lower_zero_index_label = App.create_slider(self.settings_frame, from_=300, to=10000, column=1, row=row+4, columnspan=2, width=150-50, padx=(10,40), text="lower zero index", init_val=300, number_of_steps=100, textwidget=True)
-        self.higher_zero_index, self.higher_zero_index_label = App.create_slider(self.settings_frame, from_=300, to=10000, column=1, row=row+5, columnspan=2, width=150-50, padx=(10,40), text="higher zero index", init_val=10000, number_of_steps=100, textwidget=True)
-
-        for i, (widget, variable, label) in enumerate(zip(["fourier_filter", "savgol_filter", "lower_zero_index", "higher_zero_index"],
-                                                                    ["filter_var", "savgol_var", "lower_zero_index_var", "higher_zero_index_var"],
-                                                                    ["filter_lab", "savgol_lab", "lower_zero_index_lab", "higher_zero_index_lab"]),start=2):
-            slider = getattr(self, widget)
-            slider.configure(command=lambda value, strvar=variable: self.update_slider_value(value, strvar))
-            setattr(self, variable, customtkinter.StringVar())
-            setattr(self, label, App.create_label(self.settings_frame, textvariable=getattr(self, variable), column=1, row=row+i, width=50, padx=(10+150-50,10), anchor='e', sticky='e'))
-            getattr(self, variable).set(str(round(slider.get(),2)))
-
+        self.absorption_title = App.create_label(self.settings_frame, text="Absorption Settings", font=customtkinter.CTkFont(size=16, weight="bold"), row=row, column=0, columnspan=4, padx=20, pady=(20, 5),sticky=None)
+        self.zero_bandwidth, self.zero_bandwidth_label = App.create_entry(self.settings_frame, column=1, row=row+1, width=150, text="zero abs. bandwidth", textwidget=True)
+        self.fourier_filter, self.FF_label, self.FF_varlabel, self.fourier_filter_var = App.create_slider(self.settings_frame, from_=0, to=1, column=1, row=row+2, width=150, padx=(10,40), text="fourier filter", init_val=0, number_of_steps=100, showSliderValue=True, textwidget=True, command= self.update_slider_value)
+        self.savgol_filter, self.SF_label, self.SF_varlabel, self.savgol_filter_var   = App.create_slider(self.settings_frame, from_=0, to=50, column=1, row=row+3, width=150, padx=(10,40), text="Savitzky Golay filter", init_val=20, number_of_steps=50, showSliderValue=True, textwidget=True, command= self.update_slider_value)
+        self.lower_zero_index, self.LZI_label, self.LZI_varlabel, self.lower_zero_index_var = App.create_slider(self.settings_frame, from_=0, to=1, column=1, row=row+4, width=150, padx=(10,40), text="zero wavelength 1", init_val=1, number_of_steps=100, showSliderValue=True, textwidget=True, command= self.update_slider_value)
+        self.higher_zero_index, self.HZI_label, self.HZI_varlabel, self.higher_zero_index_var = App.create_slider(self.settings_frame, from_=0, to=1, column=1, row=row+5, width=150, padx=(10,40), text="zero wavelength 2", init_val=1, number_of_steps=100, showSliderValue=True, textwidget=True, command= self.update_slider_value)
 
         for widget in [self.zero_bandwidth]:
             widget.bind("<KeyRelease>", lambda val: self.update_material_dictionary(val))
 
-        self.absorption_widgets = ["absorption_title", "zero_bandwidth", "fourier_filter", "savgol_filter", "zero_bandwidth_label", "fourier_filter_label", "savgol_filter_label", "filter_lab", "savgol_lab", "lower_zero_index", "higher_zero_index", "lower_zero_index_label", "higher_zero_index_label"]
-        self.toggle_sidebar_window(self.absorption_button, self.absorption_widgets)
+        self.absorption_widgets = ["absorption_title", "zero_bandwidth", "fourier_filter", "savgol_filter", "zero_bandwidth_label", "FF_label", "FF_varlabel", "SF_label", "SF_varlabel", "lower_zero_index", "higher_zero_index", "LZI_label", "HZI_label", "LZI_varlabel", "HZI_varlabel"]
+        self.toggle_sidebar_window(self.absorption_button, self.absorption_widgets, First_time=True)
+
+    def load_McCumber_sidebar(self):
+        row = 20
+        self.McCumber_title = App.create_label(self.settings_frame, text="McCumber Settings", font=customtkinter.CTkFont(size=16, weight="bold"), row=row, column=0, columnspan=4, padx=20, pady=(20, 5),sticky=None)
+        self.MC_central, self.MCc_label, self.MCc_varlabel, self.MC_central_var = App.create_slider(self.settings_frame, from_=0, to=1, column=1, row=row+2, width=150, text="MC central WL", init_val=0, number_of_steps=100, showSliderValue=True, textwidget=True, command=lambda value: self.update_cross_sections_plot())
+        self.MC_width, self.MCw_label, self.MCw_varlabel, self.MC_width_var = App.create_slider(self.settings_frame, from_=0, to=50, column=1, row=row+3, width=150, text="average bandwidth", init_val=0, number_of_steps=100, showSliderValue=True, textwidget=True, command=lambda value: self.update_cross_sections_plot())
+
+        self.McCumber_widgets = ["McCumber_title", "MC_central", "MC_width", "MCc_label", "MCc_varlabel", "MCw_label", "MCw_varlabel"]
+        self.toggle_sidebar_window(self.McCumber_button, self.McCumber_widgets, First_time=True)
 
     def update_material_dictionary(self, value):
         self.material_dict["N_dop"] = float(self.doping.get())*1e6
@@ -302,15 +333,36 @@ class App(customtkinter.CTk):
         self.tau_f.reinsert(str(self.material_dict["tau_f"]*1e3))
         self.zero_bandwidth.reinsert(str(self.material_dict["zero_absorption_width"]))
 
-        print(self.material_dict)
+        self.E_u = self.material_dict.get("energy_upper_level", [1e-2/self.material_dict["ZPL"]])
+        self.E_l = self.material_dict.get("energy_lower_level", [0])
 
-    def toggle_sidebar_window(self, button, widgets):
+        try:
+            sigma_a, absorption, reference, ratio = calc_absorption(self.material_dict, filter_width=float(self.fourier_filter.get()), savgol_filter_width=int(self.savgol_filter.get()))
+            self.higher_zero_index.configure(from_=absorption[0,0], to=absorption[-1,0])
+            self.lower_zero_index.configure(from_=absorption[0,0], to=absorption[-1,0])
+            self.higher_zero_index.set(absorption[-1,0])
+            self.lower_zero_index.set(absorption[0,0])
+
+            self.MC_central.configure(from_=absorption[0,0], to=absorption[-1,0])
+            
+
+        except:
+            FileNotFoundError("Absorption or reference data not found in the selected material folder.")
+
+        self.fourier_filter_var.set(0)
+        self.MC_central.set(self.material_dict["ZPL"]*1e9)
+        self.MC_width.set(10)
+        
+    def toggle_sidebar_window(self, button, widgets, First_time=False):
         if button.get():
             self.settings_frame.grid()
             [getattr(self, name).grid() for name in widgets]
         else:
             [getattr(self, name).grid_remove() for name in widgets]
             self.close_sidebar_window()
+        
+        if button == self.absorption_button and not First_time:
+            self.absorption_plot()
 
     def toggle_grid(self):
         self.ax.grid(self.show_grid.get())
@@ -323,6 +375,13 @@ class App(customtkinter.CTk):
     # Plotting section
     def setup_plot_area(self):
         """Call this ONCE when initializing the GUI"""
+        self.tabview = customtkinter.CTkTabview(self, width=250, command=lambda: self.toggle_toolbar(self.tabview.get()))
+        self.tabview.grid(row=3, column=1, padx=(10, 10), pady=(20, 0), columnspan=2, sticky="nsew", rowspan=10)
+        self.tabview.add("Show Plots")
+        self.tabview.add("Settings")
+        self.tabview.tab("Show Plots").columnconfigure(0, weight=1)
+        self.tabview.tab("Show Plots").rowconfigure(0, weight=1)
+
         self.fig = plt.figure(constrained_layout=True, dpi=150)
         self.ax = self.fig.add_subplot(1, 1, 1)
         self.canvas = FigureCanvasTkAgg(self.fig, master=self.tabview.tab("Show Plots"))
@@ -350,12 +409,13 @@ class App(customtkinter.CTk):
 
         Fluo, Fluo_low, Fluo_high = calc_fluorescence(self.material_dict, filter_width=0.6)
 
-        if Fluo_low is not None: self.ax.plot(Fluo_low[:,0], Fluo_low[:,1], label="low temp")
-        if Fluo_high is not None: self.ax.plot(Fluo_high[:,0], Fluo_high[:,1], label="high temp")
-        self.ax.plot(Fluo[:,0], Fluo[:,1], label="new")
+        if Fluo_low is not None: self.ax.plot(Fluo_low[:,0], Fluo_low[:,1], label="low temperature")
+        if Fluo_high is not None: self.ax.plot(Fluo_high[:,0], Fluo_high[:,1], label="high temperature")
+        self.ax.plot(Fluo[:,0], Fluo[:,1], label="fluorescence")
 
         self.ax.set_xlabel("wavelength in nm")
         self.ax.set_ylabel("fluorescence intensity in a.u.")
+        self.ax.legend()
         if self.show_title.get(): self.ax.set_title(f"fluorescence of {self.material_dict['name']}")
 
         self.canvas.draw()
@@ -374,33 +434,30 @@ class App(customtkinter.CTk):
         self.ax.set_ylabel("absorption in a.u.")
         self.ax.legend()
 
-
         if self.show_title.get(): self.ax.set_title(f"absorption of {self.material_dict['name']}")
-
-        self.higher_zero_index.configure(from_=absorption[0,0], to=absorption[-1,0])
-        self.lower_zero_index.configure(from_=absorption[0,0], to=absorption[-1,0])
-        if self.higher_zero_index.get() > absorption[-1,0]: self.higher_zero_index.set(absorption[-1,0])
-        if self.lower_zero_index.get() < absorption[0,0]: self.lower_zero_index.set(absorption[0,0]) 
 
         # vlines stored for later updates
         self.vline_low = self.ax.axvline(self.lower_zero_index.get(), color='red', linestyle='--', lw=0.8)
         self.vline_high = self.ax.axvline(self.higher_zero_index.get(), color='red', linestyle='--', lw=0.8)
 
+        Show_extra_lines = True if self.absorption_button.get() else False
+        self.line_ref_raw.set_visible(Show_extra_lines)
+        self.vline_low.set_visible(Show_extra_lines)
+        self.vline_high.set_visible(Show_extra_lines)
+
         self.canvas.draw()
 
     def update_absorption_plot(self):
-        sigma_a, absorption, reference, ratio = calc_absorption(
-            self.material_dict,
-            filter_width=float(self.fourier_filter.get()),
-            savgol_filter_width=int(self.savgol_filter.get())
-        )
+        if not hasattr(self, 'line_abs'):
+            return  # plot not initialized yet
+
+        sigma_a, absorption, reference, ratio = calc_absorption(self.material_dict, filter_width=float(self.fourier_filter.get()), savgol_filter_width=int(self.savgol_filter.get()))
 
         # update plot data
         self.line_abs.set_data(absorption[:,0], absorption[:,1])
         self.line_ref.set_data(reference[:,0], reference[:,1])
         self.line_ref_raw.set_data(reference[:,0], reference[:,1]/ratio)
-        self.line_sigma.set_data(sigma_a[:,0],
-                                sigma_a[:,1]/(np.max(sigma_a[:,1])/np.max(reference[:,1])))
+        self.line_sigma.set_data(sigma_a[:,0], sigma_a[:,1]/(np.max(sigma_a[:,1])/np.max(reference[:,1])))
 
         # update vertical lines
         val_low  = float(self.lower_zero_index.get())
@@ -418,15 +475,16 @@ class App(customtkinter.CTk):
         self.clear_axis()
         # absorption_depth in cm, accounts for reabsorption in the crystal
 
-        sigma_a = calc_absorption(self.material_dict, filter_width=float(self.fourier_filter.get()), savgol_filter_width=int(self.savgol_filter.get()))[0]
+        self.sigma_a = calc_absorption(self.material_dict, filter_width=float(self.fourier_filter.get()), savgol_filter_width=int(self.savgol_filter.get()))[0]
 
-        plot_list = [sigma_a]
+        plot_list = [self.sigma_a]
         plot_list_labels = [f"$\\sigma_a$ {self.material_dict['name']}"]
+        plot_list_names = ["line_sigma_a", "line_sigma_e"]
 
         if self.use_Fuchtbauer.get():
             Fluo = calc_fluorescence(self.material_dict)[0]
-            sigma_e = Fuchtbauer_Ladenburg(Fluo, self.material_dict, sigma_a=sigma_a[:,1], absorption_depth=self.absorption_depth)
-            plot_list += [sigma_e]
+            self.sigma_e = Fuchtbauer_Ladenburg(Fluo, self.material_dict, sigma_a=self.sigma_a[:,1], absorption_depth=self.absorption_depth)
+            plot_list += [self.sigma_e]
             plot_list_labels += [f"$\\sigma_e$ Füchtbauer"]
 
         self.ax.set_xlabel("wavelength in nm")
@@ -435,26 +493,49 @@ class App(customtkinter.CTk):
 
         if self.use_McCumber.get():
             thermal_energy = kb * self.material_dict.get("temperature", 295)  # in eV
-            E_u = self.material_dict.get("energy_upper_level", [1e-2/self.material_dict["ZPL"]])
-            E_l = self.material_dict.get("energy_lower_level", [0])
 
-            sigma_e_McCumber = McCumber_relation(E_l, E_u, sigma_a, thermal_energy)
-            plot_list += [sigma_e_McCumber]
+            self.sigma_e_McCumber = McCumber_relation(self.E_l, self.E_u, self.sigma_a, thermal_energy)
+            plot_list += [self.sigma_e_McCumber]
             plot_list_labels += ["$\\sigma_e$ McCumber"]
-            self.ax.set_ylim(-1e-21,1.5*np.max(sigma_a[:,1]))
+            plot_list_names += ["line_sigma_e_McCumber"]
+            self.ax.set_ylim(-1e-21,1.5*np.max(self.sigma_a[:,1]))
 
             if self.use_Fuchtbauer.get():
-                sigma_e_average = average_MCcumber_FL(sigma_e[:,0], self.material_dict, sigma_e, sigma_e_McCumber)
-                sigma_a_average = McCumber_relation_inverse(E_l, E_u, sigma_e_average, thermal_energy)
-                plot_list += [sigma_e_average, sigma_a_average]
+                self.McCumber_line = self.ax.axvline(self.MC_central.get(), color='red', linestyle='--', lw=0.8)
+                self.sigma_e_average = average_MCcumber_FL(self.material_dict, self.sigma_e, self.sigma_e_McCumber, self.MC_central.get() - self.MC_width.get()/2, self.MC_central.get() + self.MC_width.get()/2)
+                self.sigma_a_average = McCumber_relation_inverse(self.E_l, self.E_u, self.sigma_e_average, thermal_energy)
+                plot_list += [self.sigma_e_average, self.sigma_a_average]
                 plot_list_labels += ["$\\sigma_e$ average", "$\\sigma_a$ average"]
+                plot_list_names += ["line_sigma_e_average", "line_sigma_a_average"]
 
 
-        for data, label in zip(plot_list, plot_list_labels):
-            self.ax.plot(data[:,0], data[:,1], label=label)
+        for data, label, name in zip(plot_list, plot_list_labels, plot_list_names):
+            setattr(self, name, self.ax.plot(data[:,0], data[:,1], label=label)[0])
 
         self.ax.legend()
         self.canvas.draw()
+    
+    def update_cross_sections_plot(self):
+        if not hasattr(self, 'line_sigma_a'):
+            return  # plot not initialized yet
+
+        if self.use_McCumber.get() and self.use_Fuchtbauer.get():
+            thermal_energy = kb * self.material_dict.get("temperature", 295)  # in eV
+            # update plot data
+            self.sigma_e_average = average_MCcumber_FL(self.material_dict, self.sigma_e, self.sigma_e_McCumber, self.MC_central.get() - self.MC_width.get()/2, self.MC_central.get() + self.MC_width.get()/2)
+            self.sigma_a_average = McCumber_relation_inverse(self.E_l, self.E_u, self.sigma_e_average, thermal_energy)
+            self.line_sigma_e_average.set_data(self.sigma_e_average[:,0], self.sigma_e_average[:,1])
+            self.line_sigma_a_average.set_data(self.sigma_a_average[:,0], self.sigma_a_average[:,1])
+
+            # update vertical lines
+            val  = float(self.MC_central.get())
+
+            self.McCumber_line.set_xdata([val, val])
+
+            # refresh only the artists (faster than full draw)
+            self.ax.relim()
+            self.ax.autoscale_view()
+            self.canvas.draw_idle()
  
     def read_file_list(self):
         path = customtkinter.filedialog.askdirectory(initialdir=self.folder_path)
@@ -566,10 +647,7 @@ class App(customtkinter.CTk):
         
         self.close_sidebar_window()
 
-    def update_slider_value(self, value, strvar_name):
-        variable = getattr(self, strvar_name)
-        variable.set(str(round(value,2)))
-
+    def update_slider_value(self, value):
         self.update_material_dictionary(value)
         self.update_absorption_plot()
 
@@ -728,38 +806,6 @@ def calc_fluorescence(material, filter_width=0, Do_Plots=True):
 
     return Fluo, Fluo_low, Fluo_high
 
-# def calc_cubic_interpolation(absorption, reference, zero_absorption_width):
-#     ## cubic fit of spectrum start and end
-#     w = zero_absorption_width
-    
-#     if w == 0:
-#         return np.mean(absorption[-10:,1]) / np.mean(reference[-10:,1])
-    
-#     y1= np.mean(absorption[:int(w/5),1]) / np.mean(reference[:int(w/5),1])
-#     y2= np.mean(absorption[int(w*4/5):w,1]) / np.mean(reference[int(w*4/5):w,1])
-#     y3= np.mean(absorption[-w:-int(w*4/5):,1]) / np.mean(reference[-w:-int(w*4/5):,1])
-#     y4= np.mean(absorption[-int(w/5):,1]) / np.mean(reference[-int(w/5):,1])
-    
-#     x1= np.mean(absorption[:int(w/5),0])
-#     x2= np.mean(absorption[int(w*4/5):w,0])
-#     x3= np.mean(absorption[-w:-int(w*4/5):,0])
-#     x4= np.mean(absorption[-int(w/5):,0])
-    
-#     x_values = np.array([x1,x2,x3,x4])
-#     y_values = np.array([y1,y2,y3,y4])
-    
-#     print(x_values, y_values)
-#     # Construct the Vandermonde matrix
-#     A = np.vander(x_values, 4)  # 4 columns for cubic polynomial
-    
-#     # Solve the system of equations
-#     coefficients = np.linalg.solve(A, y_values)
-#     # coefficients = [1,1,1,1]
-    
-#     polynomial_fit = np.polynomial.Polynomial(coefficients[::-1])
-    
-#     return polynomial_fit(absorption[:,0])
-
 def calc_cubic_interpolation(absorption, reference, zero_absorption_width, mid_lambda1=0, mid_lambda2=np.inf):
     """
     Perform cubic interpolation between two spectral regions centered around mid_idx1 and mid_idx2.
@@ -783,20 +829,20 @@ def calc_cubic_interpolation(absorption, reference, zero_absorption_width, mid_l
         Interpolated values of the cubic polynomial evaluated over absorption[:,0].
     """
     w = zero_absorption_width
+    n = len(absorption)
     mid_idx1 = np.argmin(np.abs(absorption[:,0] - mid_lambda1))
     mid_idx2 = np.argmin(np.abs(absorption[:,0] - mid_lambda2)) if mid_lambda2 != np.inf else len(absorption) - 1
-    print(mid_lambda2)
 
     # Handle default special case: only use end section if w == 0
     if w == 0:
-        return np.mean(absorption[-10:,1]) / np.mean(reference[-10:,1])
+        y1 = absorption[mid_idx1, 1]/reference[mid_idx1, 1]
+        y2 = absorption[mid_idx2, 1]/reference[mid_idx2, 1]
 
-    # Convert negative indices (like -1) to actual positions
-    n = len(absorption)
-    if mid_idx1 < 0:
-        mid_idx1 = n + mid_idx1
-    if mid_idx2 < 0:
-        mid_idx2 = n + mid_idx2
+        if mid_idx1 == mid_idx2: return y1  # both indices are the same
+        
+        x = np.arange(n)
+        return y1 + (x-mid_idx1) * (y2 - y1) / (mid_idx2 - mid_idx1)
+        # return np.mean(absorption[-10:,1]) / np.mean(reference[-10:,1])
 
     # Define start and end slices for both regions
     region1 = slice(max(0, mid_idx1 - w//2), min(n, mid_idx1 + w//2))
@@ -1001,12 +1047,21 @@ def get_overlap_lengths(arr):
 
     return start_indices, lengths
 
-def average_MCcumber_FL(lambdas, material, FL_array, MC_array):
+def average_MCcumber_FL(material, FL_array, MC_array, FL_min=None, MC_max=None):
+    Delta_lambd = min(np.diff(FL_array[:,0]).min(), np.diff(MC_array[:,0]).min())
+    lambdas = np.arange(min(FL_array[0,0], MC_array[0,0]), max(FL_array[-1,0], MC_array[-1,0]), Delta_lambd)
+
+    FL_array = np.vstack([lambdas, np.interp(lambdas, FL_array[:,0], FL_array[:,1], left=FL_array[0,1], right=FL_array[-1,1])]).T
+    MC_array = np.vstack([lambdas, np.interp(lambdas, MC_array[:,0], MC_array[:,1], left=MC_array[0,1], right=MC_array[-1,1])]).T
+
     array_FL, array_MC = [np.zeros_like(lambdas) for _ in range(2)]
-    FL_min = material["FL_min"] if "FL_min" in material else material["ZPL"]*1e9 - 10
-    MC_max = material["MC_max"] if "MC_max" in material else material["ZPL"]*1e9 + 10
-    sliceFL = find_interval(lambdas, FL_min, 1200)
-    sliceMC = find_interval(lambdas, 800, MC_max)
+    if FL_min is None: FL_min = material.get("ZPL", 980e-9)*1e9 - 10 
+    if MC_max is None: MC_max = material.get("ZPL", 980e-9)*1e9 + 10
+
+    print(FL_min, MC_max)
+
+    sliceFL = find_interval(lambdas, FL_min, 10000)
+    sliceMC = find_interval(lambdas, 100, MC_max)
 
     array_FL[sliceFL] += FL_array[sliceFL,1]
     array_MC[sliceMC] += MC_array[sliceMC,1]
