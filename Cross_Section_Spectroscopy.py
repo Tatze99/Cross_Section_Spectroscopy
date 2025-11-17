@@ -280,8 +280,10 @@ class App(customtkinter.CTk):
         self.doping        = App.create_entry(self.settings_frame, row=row+1, column=1, width=110, text="doping [cm⁻³]")
         self.thickness     = App.create_entry(self.settings_frame, row=row+2, column=1, width=110, text="thickness [mm]")
         self.tau_f         = App.create_entry(self.settings_frame, row=row+3, column=1, width=110, text="lifetime τ [ms]")
+        self.refractive_index = App.create_entry(self.settings_frame, row=row+4, column=1, width=110, text="refractive index")
+        self.temperature    = App.create_entry(self.settings_frame, row=row+5, column=1, width=110, text="temperature [K]")
 
-        for widget in [self.doping, self.thickness, self.tau_f]:
+        for widget in [self.doping, self.thickness, self.tau_f, self.refractive_index, self.temperature]:
             widget.bind("<KeyRelease>", lambda val: self.update_material_dictionary(val))
 
         self.crystal_widgets = set(self.settings_frame.winfo_children()) - before_widgets
@@ -328,6 +330,8 @@ class App(customtkinter.CTk):
         self.material_dict["zero_absorption_width"] = int(self.zero_bandwidth.get())
         self.material_dict["zero_absorption_wavelength"] = (int(self.lower_zero_index.get()), int(self.higher_zero_index.get()))
         self.material_dict["absorption_depth"] = float(self.FL_absorption.get())
+        self.material_dict["temperature"] = float(self.temperature.get())
+        self.material_dict["n"] = float(self.refractive_index.get())
 
     # load the material
     def load_material(self, material):
@@ -336,10 +340,15 @@ class App(customtkinter.CTk):
             self.material_dict = json.load(file)
 
         self.material_dict.setdefault("zero_absorption_wavelength", (0, np.inf))
+        self.material_dict.setdefault("folder_path", material)
+        self.material_dict.setdefault("zero_absorption_width", 0)
+
         self.doping.reinsert(self.material_dict["N_dop"]*1e-6)
         self.thickness.reinsert(str(self.material_dict["length"]*1e3))
         self.tau_f.reinsert(str(self.material_dict["tau_f"]*1e3))
         self.zero_bandwidth.reinsert(str(self.material_dict["zero_absorption_width"]))
+        self.refractive_index.reinsert(str(self.material_dict["n"]))
+        self.temperature.reinsert(str(self.material_dict["temperature"]))
 
         self.E_u = self.material_dict.get("energy_upper_level", [1e-2/self.material_dict["ZPL"]])
         self.E_l = self.material_dict.get("energy_lower_level", [0])
@@ -414,10 +423,15 @@ class App(customtkinter.CTk):
     def fluorescence_plot(self):
         self.clear_axis()
 
+        # get fluorescence file names!
+        path = os.path.join(Standard_path, "measurements", self.material_dict["folder_path"])
+        fluorescence_files = glob.glob(os.path.join(path, '*fluorescence*.txt'))
+        filenames = [os.path.basename(f).replace(".txt", "").replace("_", " ") for f in fluorescence_files]
+
         Fluo, Fluo_low, Fluo_high = calc_fluorescence(self.material_dict, filter_width=0.6)
 
-        if Fluo_low is not None: self.ax.plot(Fluo_low[:,0], Fluo_low[:,1], label="low temperature")
-        if Fluo_high is not None: self.ax.plot(Fluo_high[:,0], Fluo_high[:,1], label="high temperature")
+        if Fluo_low is not None: self.ax.plot(Fluo_low[:,0], Fluo_low[:,1], label=filenames[0])
+        if Fluo_high is not None: self.ax.plot(Fluo_high[:,0], Fluo_high[:,1], label=filenames[1])
         self.ax.plot(Fluo[:,0], Fluo[:,1], label="fluorescence")
         self.ax.set_xlabel("wavelength in nm")
         self.ax.set_ylabel("fluorescence intensity in a.u.")
@@ -504,7 +518,7 @@ class App(customtkinter.CTk):
             plot_list += [self.sigma_e_McCumber]
             plot_list_labels += ["$\\sigma_e$ McCumber"]
             plot_list_names += ["line_sigma_e_McCumber"]
-            self.ax.set_ylim(-1e-21,1.5*np.max(self.sigma_a[:,1]))
+            self.ax.set_ylim(-1e-21,2*np.max(self.sigma_a[:,1]))
 
             if self.use_Fuchtbauer.get() and self.average_sigma.get():
                 self.McCumber_line = self.ax.axvline(self.MC_central.get(), color='red', linestyle='--', lw=0.8)
@@ -513,6 +527,9 @@ class App(customtkinter.CTk):
                 plot_list += [self.sigma_e_average, self.sigma_a_average]
                 plot_list_labels += ["$\\sigma_e$ average", "$\\sigma_a$ average"]
                 plot_list_names += ["line_sigma_e_average", "line_sigma_a_average"]
+            
+            if self.use_Fuchtbauer.get():
+                self.ax.set_ylim(-1e-21,1.3*max(np.max(self.sigma_a[:,1]), np.max(self.sigma_e[:,1])))
 
 
         for data, label, name in zip(plot_list, plot_list_labels, plot_list_names):
@@ -781,28 +798,28 @@ def normalize(array):
     return array / (np.sum(array))
 
 def calc_fluorescence(material, filter_width=0.6):
-    subfolder = material["date"] + '_' + material["name"]
+    path = os.path.join(Standard_path, "measurements", material["folder_path"])
     Fluo_low = None
     Fluo_high = None
     
-    if material["correct_temp"]:
-        fluo_low_name = subfolder + '_Fluorescence_low.txt'
-        fluo_high_name = subfolder + '_Fluorescence_high.txt'
-        Fluo_low = np.genfromtxt(os.path.join(Standard_path, "measurements", subfolder, fluo_low_name), skip_header=2, delimiter=",")
-        Fluo_high = np.genfromtxt(os.path.join(Standard_path, "measurements", subfolder, fluo_high_name), skip_header=2, delimiter=",")
+    fluorescence_files = glob.glob(os.path.join(path, '*fluorescence*.txt'))
+    
+    if len(fluorescence_files) == 1:
+        Fluo = np.genfromtxt(fluorescence_files[0], skip_header=2, delimiter=",")
+
+    else: 
+        fluo_low_name = fluorescence_files[0]
+        fluo_high_name = fluorescence_files[1]
+        Fluo_low = np.genfromtxt(fluo_low_name, skip_header=2, delimiter=",")
+        Fluo_high = np.genfromtxt(fluo_high_name, skip_header=2, delimiter=",")
 
         Fluo_low[:,1] = normalize(Fluo_low[:,1])
         Fluo_high[:,1] = normalize(Fluo_high[:,1])
-        
-        
         Fluo = Fluo_low.copy()
 
         for i, (low, high) in enumerate(zip(Fluo_low[:,1], Fluo_high[:,1])):  
             if abs(high - low) > 1e-5: 
                 Fluo[i,1] = min(low,high)
-    else:
-        fluo_name = subfolder + '_Fluorescence.txt'
-        Fluo = np.genfromtxt(os.path.join(Standard_path, "measurements", subfolder, fluo_name), skip_header=2, delimiter=",")
     
     average_interval = find_interval(Fluo[:,0], 990, 1150)
     average_interval2 = find_interval(Fluo[:,0], 1000, 1060)
@@ -876,10 +893,7 @@ def calc_cubic_interpolation(absorption, reference, zero_absorption_width, mid_l
     return poly(absorption[:,0])
 
 def calc_absorption(material, filter_width = 0, savgol_filter_width = 20, savgol_filter_order=3):
-    subfolder = material["date"] + '_' + material["name"]
-    path = os.path.join(Standard_path, "measurements", subfolder)
-    absorp_name = subfolder + '_Absorption'
-    absorp_ref_name = subfolder + '_Absorption_reference'
+    path = os.path.join(Standard_path, "measurements", material["folder_path"])
 
     absorption_files = [f for f in glob.glob(os.path.join(path, '*absorption*.txt')) if 'reference' not in f.lower()]
     reference_files = glob.glob(os.path.join(path, '*reference*.txt'))
@@ -988,7 +1002,7 @@ def calc_Z_lower_upper(energies_lower, energies_upper, kbT):
     Z_lower = calc_partition_function(2, Energy_F72, kbT)
     Z_upper = calc_partition_function(2, Energy_F52, kbT)
 
-    # print(f"Z_lower = {Z_lower:.3f}\nZ_upper = {Z_upper:.3f}\nZ_l/Z_u = {Z_lower/Z_upper:.3f}")
+    print(f"Z_lower = {Z_lower:.3f}\nZ_upper = {Z_upper:.3f}\nZ_l/Z_u = {Z_lower/Z_upper:.3f}")
 
     return Z_lower, Z_upper, ZPL
 
