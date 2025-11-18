@@ -5,7 +5,6 @@
     "N_dop": 2.74e26,
     "n": 1.8,
     "temperature": 293,
-    "zero_absorption_width": 0,
     "energy_lower_level": [0, 581, 619, 786],
     "energy_upper_level": [10327, 10634, 10927],
     "ZPL": 968.3e-9

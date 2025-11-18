@@ -1,5 +1,4 @@
 import os, glob
-import re
 import sys
 import json
 import customtkinter
@@ -10,6 +9,7 @@ from scipy.optimize import curve_fit as cf
 from scipy.signal import savgol_filter
 import scipy.integrate as integrate
 from PIL import Image
+import darkdetect
 
 version_number = "25/11"
 Standard_path = os.path.dirname(os.path.abspath(__file__))
@@ -58,11 +58,11 @@ class App(customtkinter.CTk):
         self.canvas_width.bind("<KeyRelease>", lambda val: self.update_canvas_size(self.canvas_ratio_list[self.canvas_ratio.get()]))
         self.canvas_height.bind("<KeyRelease>", lambda val: self.update_canvas_size(self.canvas_ratio_list[self.canvas_ratio.get()]))
 
-        self.save_attributes = [self.material_list, self.use_McCumber, self.use_Fuchtbauer, self.average_sigma]
+        self.save_attributes = ["material_list", "use_McCumber", "use_Fuchtbauer", "average_sigma"]
 
-        self.save_attributes.extend(self.crystal_widgets)
-        self.save_attributes.extend(self.absorption_widgets)
-        self.save_attributes.extend(self.cross_section_widgets)
+        self.save_attributes.extend(["doping", "thickness", "tau_f", "refractive_index", "temperature"])
+        self.save_attributes.extend(["zero_bandwidth", "FF_absorption", "FF_fluorescence", "savgol_filter", "lower_zero_index", "higher_zero_index"])
+        self.save_attributes.extend(["MC_central", "MC_width", "FL_absorption"])
         self.save_attributes.extend(self.settings_widgets)
 
     def initialize_ui_images(self):
@@ -110,10 +110,11 @@ class App(customtkinter.CTk):
         #switches
         self.config_title       = App.create_label(frame, row=10, column=0, text="Configure Simulation", font=customtkinter.CTkFont(size=16, weight="bold"), padx=20, pady=(20, 5),sticky=None)
         self.use_McCumber       = App.create_switch(frame, row=11, column=0, text="Use McCumber")
-        self.use_Fuchtbauer     = App.create_switch(frame, row=12, column=0, text="Use Füchtbauer")
+        self.use_Fuchtbauer     = App.create_switch(frame, row=12, column=0, text="Use Füchtbauer", pady=(5,15))
         self.crystal_button     = App.create_switch(frame, row=13, column=0, text="Config Crystal", command=lambda: self.toggle_sidebar_window(self.crystal_button, self.crystal_widgets))
-        self.absorption_button  = App.create_switch(frame, row=14, column=0, text="Config Absorption", command=lambda: self.toggle_sidebar_window(self.absorption_button, self.absorption_widgets))
-        self.McCumber_button    = App.create_switch(frame, row=15, column=0, text="Config McCumber", command=lambda: self.toggle_sidebar_window(self.McCumber_button, self.cross_section_widgets))
+        self.fluorescence_button  = App.create_switch(frame, row=14, column=0, text="Config Fluorescence", command=lambda: self.toggle_sidebar_window(self.fluorescence_button, self.fluorescence_widgets))
+        self.absorption_button  = App.create_switch(frame, row=15, column=0, text="Config Absorption", command=lambda: self.toggle_sidebar_window(self.absorption_button, self.absorption_widgets))
+        self.McCumber_button    = App.create_switch(frame, row=16, column=0, text="Config McCumber", command=lambda: self.toggle_sidebar_window(self.McCumber_button, self.cross_section_widgets))
 
 
         # SETTINGS FRAME
@@ -127,15 +128,13 @@ class App(customtkinter.CTk):
         self.plot_settings_title = App.create_label(frame, row=2, column=0, text="Plot settings", font=customtkinter.CTkFont(size=16, weight="bold"), columnspan=2, padx=20, pady=(20, 5),sticky=None)
         self.show_title          = App.create_switch(frame, row=3, column=0, text="Show title", pady=(10,5), columnspan=2)
         self.show_grid           = App.create_switch(frame, row=4, column=0, text="Use Grid", command=self.toggle_grid, columnspan=2)
-        self.save_data           = App.create_switch(frame, row=5, column=0, text="Save data during plot", columnspan=2)
-        self.save_plot           = App.create_switch(frame, row=6, column=0, text="Save figure during plot", columnspan=2)
 
         self.canvas_size_title = App.create_label(frame, row=9, column=0, text="Canvas Size", font=customtkinter.CTkFont(size=16, weight="bold"), columnspan=2, padx=20, pady=(20, 5),sticky=None)
         self.canvas_width, self.canvas_width_label        = App.create_entry(frame,column=1, row=11, width=70,text="width in cm", placeholder_text="10 [cm]", sticky='w', init_val=10, textwidget=True)
         self.canvas_height, self.canvas_height_label      = App.create_entry(frame,column=1, row=12, width=70,text="height in cm", placeholder_text="10 [cm]", sticky='w', init_val=10, textwidget=True)
         self.canvas_ratio   = App.create_Menu(frame, column=1, row=10, width=110, values=list(self.canvas_ratio_list.keys()), text="Canvas Size", command=lambda x: self.update_canvas_size(self.canvas_ratio_list[x]))
 
-        self.settings_widgets = ["save_data", "save_plot", "crystal_button", "pump_button", "seed_button", "amplifier_button", "show_title", "show_grid", "canvas_width", "canvas_height", "canvas_ratio"]
+        self.settings_widgets = ["show_title", "show_grid", "canvas_width", "canvas_height", "canvas_ratio"]
 
         self.show_title.select()
         self.show_grid.select()
@@ -150,6 +149,7 @@ class App(customtkinter.CTk):
         self.columnconfigure(2,weight=1)
 
         self.load_crystal_sidebar()
+        self.load_fluorescence_sidebar()
         self.load_absorption_sidebar()
         self.load_cross_section_sidebar()
         self.load_material(self.materials[0])
@@ -276,7 +276,7 @@ class App(customtkinter.CTk):
         row = 0
         before_widgets = set(self.settings_frame.winfo_children())
 
-        self.crystal_title = App.create_label(self.settings_frame, row=row, column=0, text="Crystal Settings", font=customtkinter.CTkFont(size=16, weight="bold"), columnspan=4, padx=20, pady=(20, 5), sticky=None)
+        App.create_label(self.settings_frame, row=row, column=0, text="Crystal Settings", font=customtkinter.CTkFont(size=16, weight="bold"), columnspan=4, padx=20, pady=(20, 5), sticky=None)
         self.doping        = App.create_entry(self.settings_frame, row=row+1, column=1, width=110, text="doping [cm⁻³]")
         self.thickness     = App.create_entry(self.settings_frame, row=row+2, column=1, width=110, text="thickness [mm]")
         self.tau_f         = App.create_entry(self.settings_frame, row=row+3, column=1, width=110, text="lifetime τ [ms]")
@@ -289,26 +289,32 @@ class App(customtkinter.CTk):
         self.crystal_widgets = set(self.settings_frame.winfo_children()) - before_widgets
         self.toggle_sidebar_window(self.crystal_button, self.crystal_widgets)
 
-    def load_absorption_sidebar(self):
+    def load_fluorescence_sidebar(self):
         row = 10
 
         before_widgets = set(self.settings_frame.winfo_children())
-        self.absorption_title = App.create_label(self.settings_frame, text="Absorption Settings", font=customtkinter.CTkFont(size=16, weight="bold"), row=row, column=0, columnspan=4, padx=20, pady=(20, 5),sticky=None)
-        self.zero_bandwidth, self.zero_bandwidth_label = App.create_entry(self.settings_frame, column=1, row=row+1, width=150, text="zero abs. bandwidth", textwidget=True)
-        self.fourier_filter, self.fourier_filter_var        = App.create_slider(self.settings_frame, from_=0, to=1, column=1, row=row+2, width=150, text="fourier filter", init_val=0, number_of_steps=100, showSliderValue=True, command= self.update_slider_value)
-        self.savgol_filter, self.savgol_filter_var          = App.create_slider(self.settings_frame, from_=0, to=50, column=1, row=row+3, width=150, text="Savitzky Golay filter", init_val=20, number_of_steps=50, showSliderValue=True, command= self.update_slider_value)
-        self.lower_zero_index, self.lower_zero_index_var    = App.create_slider(self.settings_frame, from_=0, to=1, column=1, row=row+4, width=150, text="zero wavelength 1", init_val=1, number_of_steps=100, showSliderValue=True, command= self.update_slider_value)
-        self.higher_zero_index, self.higher_zero_index_var  = App.create_slider(self.settings_frame, from_=0, to=1, column=1, row=row+5, width=150, text="zero wavelength 2", init_val=1, number_of_steps=100, showSliderValue=True, command= self.update_slider_value)
+        App.create_label(self.settings_frame, text="Fluorescence Settings", font=customtkinter.CTkFont(size=16, weight="bold"), row=row, column=0, columnspan=4, padx=20, pady=(20, 5),sticky=None)
+        self.FF_fluorescence, self.FF_fluorescence_var        = App.create_slider(self.settings_frame, from_=0, to=1, column=1, row=row+2, width=150, text="fourier filter (raw data)", init_val=0.6, number_of_steps=100, showSliderValue=True, command= self.update_fluo_slider_value)
 
+        self.fluorescence_widgets = set(self.settings_frame.winfo_children()) - before_widgets
+        self.toggle_sidebar_window(self.fluorescence_button, self.fluorescence_widgets, First_time=True)
 
-        for widget in [self.zero_bandwidth]:
-            widget.bind("<KeyRelease>", lambda val: self.update_material_dictionary(val))
+    def load_absorption_sidebar(self):
+        row = 20
+
+        before_widgets = set(self.settings_frame.winfo_children())
+        App.create_label(self.settings_frame, text="Absorption Settings", font=customtkinter.CTkFont(size=16, weight="bold"), row=row, column=0, columnspan=4, padx=20, pady=(20, 5),sticky=None)
+        self.FF_absorption, self.FF_absorption_var        = App.create_slider(self.settings_frame, from_=0, to=1, column=1, row=row+1, width=150, text="fourier filter (raw data)", init_val=0, number_of_steps=100, showSliderValue=True, command= self.update_abs_slider_value)
+        self.savgol_filter, self.savgol_filter_var          = App.create_slider(self.settings_frame, from_=0, to=50, column=1, row=row+2, width=150, text="Savitzky Golay filter (σ)", init_val=0, number_of_steps=50, showSliderValue=True, command= self.update_abs_slider_value)
+        self.zero_bandwidth, self.zero_bandwidth_var        = App.create_slider(self.settings_frame, from_=0, to=100, column=1, row=row+3, width=150, text="zero abs. bandwidth [nm]", init_val=0, number_of_steps=100, showSliderValue=True, command= self.update_abs_slider_value)
+        self.lower_zero_index, self.lower_zero_index_var    = App.create_slider(self.settings_frame, from_=0, to=1, column=1, row=row+4, width=150, text="zero wavelength 1 [nm]", init_val=1, number_of_steps=100, showSliderValue=True, command= self.update_abs_slider_value)
+        self.higher_zero_index, self.higher_zero_index_var  = App.create_slider(self.settings_frame, from_=0, to=1, column=1, row=row+5, width=150, text="zero wavelength 2 [nm]", init_val=1, number_of_steps=100, showSliderValue=True, command= self.update_abs_slider_value)
 
         self.absorption_widgets = set(self.settings_frame.winfo_children()) - before_widgets
         self.toggle_sidebar_window(self.absorption_button, self.absorption_widgets, First_time=True)
 
     def load_cross_section_sidebar(self):
-        row = 20
+        row = 30
         before_widgets = set(self.settings_frame.winfo_children()) # font=customtkinter.CTkFont(size=16, weight="bold")
         self.average_sigma = App.create_switch(self.settings_frame, row=row, column=0, text="Average MC Cumber", columnspan=4, padx=20, pady=(20, 5),sticky=None, font=customtkinter.CTkFont(size=16, weight="bold"), command=lambda: self.cross_sections_plot())
         self.MC_central, self.MC_central_var = App.create_slider(self.settings_frame, from_=0, to=1, column=1, row=row+2, width=150, text="MC central WL", init_val=0, number_of_steps=100, showSliderValue=True, command=lambda value: self.update_cross_sections_plot())
@@ -327,7 +333,7 @@ class App(customtkinter.CTk):
         self.material_dict["N_dop"] = float(self.doping.get())*1e6
         self.material_dict["length"] = float(self.thickness.get())*1e-3
         self.material_dict["tau_f"] = float(self.tau_f.get())*1e-3
-        self.material_dict["zero_absorption_width"] = int(self.zero_bandwidth.get())
+        self.material_dict["zero_absorption_width"] = self.zero_bandwidth.get()
         self.material_dict["zero_absorption_wavelength"] = (int(self.lower_zero_index.get()), int(self.higher_zero_index.get()))
         self.material_dict["absorption_depth"] = float(self.FL_absorption.get())
         self.material_dict["temperature"] = float(self.temperature.get())
@@ -346,15 +352,15 @@ class App(customtkinter.CTk):
         self.doping.reinsert(self.material_dict["N_dop"]*1e-6)
         self.thickness.reinsert(str(self.material_dict["length"]*1e3))
         self.tau_f.reinsert(str(self.material_dict["tau_f"]*1e3))
-        self.zero_bandwidth.reinsert(str(self.material_dict["zero_absorption_width"]))
         self.refractive_index.reinsert(str(self.material_dict["n"]))
         self.temperature.reinsert(str(self.material_dict["temperature"]))
+        self.zero_bandwidth.set(self.material_dict["zero_absorption_width"])
 
         self.E_u = self.material_dict.get("energy_upper_level", [1e-2/self.material_dict["ZPL"]])
         self.E_l = self.material_dict.get("energy_lower_level", [0])
 
         try:
-            sigma_a, absorption, reference, ratio = calc_absorption(self.material_dict, filter_width=float(self.fourier_filter.get()), savgol_filter_width=int(self.savgol_filter.get()))
+            sigma_a, absorption, reference, ratio = calc_absorption(self.material_dict, filter_width=float(self.FF_absorption.get()), savgol_filter_width=int(self.savgol_filter.get()))
             self.higher_zero_index.configure(from_=absorption[0,0], to=absorption[-1,0])
             self.lower_zero_index.configure(from_=absorption[0,0], to=absorption[-1,0])
             self.higher_zero_index.set(absorption[-1,0])
@@ -366,7 +372,7 @@ class App(customtkinter.CTk):
         except:
             FileNotFoundError("Absorption or reference data not found in the selected material folder.")
 
-        self.fourier_filter_var.set(0)
+        self.FF_absorption_var.set(0)
         self.MC_central.set(self.material_dict["ZPL"]*1e9)
         self.MC_width.set(10)
         
@@ -386,7 +392,7 @@ class App(customtkinter.CTk):
         plt.rcParams["axes.grid"] = self.show_grid.get()
 
     def close_sidebar_window(self):
-        if not self.crystal_button.get() and not self.absorption_button.get() and not self.McCumber_button.get():
+        if not self.crystal_button.get() and not self.absorption_button.get() and not self.McCumber_button.get() and not self.fluorescence_button.get():
             self.settings_frame.grid_remove()
 
     # Plotting section
@@ -411,44 +417,46 @@ class App(customtkinter.CTk):
         self.fig.clear()
         self.ax = self.fig.add_subplot(1, 1, 1)
 
-    def clear_axis(self):
-        self.clear_figure()
-        self.kwargs = {"axis": [self.ax, self.fig],
-                       "save_data": self.save_data.get(),
-                       "save_path": self.folder_path.get(),
-                       "save": self.save_plot.get(),
-                       "show_title": self.show_title.get(),
-                    }  # base args for all plots
-
     def fluorescence_plot(self):
-        self.clear_axis()
+        self.clear_figure()
 
         # get fluorescence file names!
         path = os.path.join(Standard_path, "measurements", self.material_dict["folder_path"])
-        fluorescence_files = glob.glob(os.path.join(path, '*fluorescence*.txt'))
+        fluorescence_files = glob.glob(os.path.join(path, '*fluorescence*.txt')) 
         filenames = [os.path.basename(f).replace(".txt", "").replace("_", " ") for f in fluorescence_files]
+    
+        if len(fluorescence_files) > 1: 
+            self.line_fluo_low, = self.ax.plot([], [], label=filenames[0])
+            self.line_fluo_high, = self.ax.plot([], [], label=filenames[1])
 
-        Fluo, Fluo_low, Fluo_high = calc_fluorescence(self.material_dict, filter_width=0.6)
+        self.line_fluo, = self.ax.plot([], [], label="fluorescence")
 
-        if Fluo_low is not None: self.ax.plot(Fluo_low[:,0], Fluo_low[:,1], label=filenames[0])
-        if Fluo_high is not None: self.ax.plot(Fluo_high[:,0], Fluo_high[:,1], label=filenames[1])
-        self.ax.plot(Fluo[:,0], Fluo[:,1], label="fluorescence")
         self.ax.set_xlabel("wavelength in nm")
         self.ax.set_ylabel("fluorescence intensity in a.u.")
         self.ax.legend()
         if self.show_title.get(): self.ax.set_title(f"fluorescence of {self.material_dict['name']}")
+        self.update_fluorescence_plot()
 
-        self.canvas.draw()
+    def update_fluorescence_plot(self):
+        if hasattr(self, 'line_fluo'):
+            Fluo, Fluo_low, Fluo_high = calc_fluorescence(self.material_dict, filter_width=self.FF_fluorescence.get())
+
+            if Fluo_low is not None and Fluo_high is not None: 
+                self.line_fluo_low.set_data(Fluo_low[:,0], Fluo_low[:,1])
+                self.line_fluo_high.set_data(Fluo_high[:,0], Fluo_high[:,1])
+
+            self.line_fluo.set_data(Fluo[:,0], Fluo[:,1])
+            self.ax.relim()
+            self.ax.autoscale_view()
+            self.canvas.draw_idle()
 
     def absorption_plot(self):
-        self.clear_axis()
+        self.clear_figure()
 
-        sigma_a, absorption, reference, ratio = calc_absorption(self.material_dict, filter_width=float(self.fourier_filter.get()), savgol_filter_width=int(self.savgol_filter.get()))
-
-        self.line_abs, = self.ax.plot(absorption[:,0], absorption[:,1], label="absorption")
-        self.line_ref, = self.ax.plot(reference[:,0], reference[:,1], label="reference")
-        self.line_ref_raw, =self.ax.plot(reference[:,0], reference[:,1]/ratio, label="reference raw", c="tab:orange", lw=0.8, alpha=0.7)
-        self.line_sigma, = self.ax.plot(sigma_a[:,0], sigma_a[:,1]/(np.max(sigma_a[:,1])/np.max(reference[:,1])), label="absorption cross section", c="tab:green", lw=0.8)
+        self.line_abs, = self.ax.plot([],[], label="absorption")
+        self.line_ref, = self.ax.plot([],[], label="reference")
+        self.line_ref_raw, = self.ax.plot([],[], label="reference raw", c="tab:orange", lw=0.8, alpha=0.7)
+        self.line_sigma, = self.ax.plot([],[], label="absorption cross section", c="tab:green", lw=0.8)
 
         self.ax.set_xlabel("wavelength in nm")
         self.ax.set_ylabel("absorption in a.u.")
@@ -457,21 +465,21 @@ class App(customtkinter.CTk):
         if self.show_title.get(): self.ax.set_title(f"absorption of {self.material_dict['name']}")
 
         # vlines stored for later updates
-        self.vline_low = self.ax.axvline(self.lower_zero_index.get(), color='red', linestyle='--', lw=0.8)
-        self.vline_high = self.ax.axvline(self.higher_zero_index.get(), color='red', linestyle='--', lw=0.8)
+        self.vline_low = self.ax.axvline(0, color='red', linestyle='--', lw=0.8)
+        self.vline_high = self.ax.axvline(0, color='red', linestyle='--', lw=0.8)
+        self.shade_low = self.ax.axvspan(0,0, alpha=0.1, color='red')
+        self.shade_high = self.ax.axvspan(0,0, alpha=0.1, color='red')
 
-        Show_extra_lines = True if self.absorption_button.get() else False
-        self.line_ref_raw.set_visible(Show_extra_lines)
-        self.vline_low.set_visible(Show_extra_lines)
-        self.vline_high.set_visible(Show_extra_lines)
+        for line in [self.line_ref_raw, self.vline_low, self.vline_high, self.shade_low, self.shade_high]:
+            line.set_visible(self.absorption_button.get())
 
-        self.canvas.draw()
+        self.update_absorption_plot()
 
     def update_absorption_plot(self):
         if not hasattr(self, 'line_abs'):
             return  # plot not initialized yet
 
-        sigma_a, absorption, reference, ratio = calc_absorption(self.material_dict, filter_width=float(self.fourier_filter.get()), savgol_filter_width=int(self.savgol_filter.get()))
+        sigma_a, absorption, reference, ratio = calc_absorption(self.material_dict, filter_width=float(self.FF_absorption.get()), savgol_filter_width=int(self.savgol_filter.get()))
 
         # update plot data
         self.line_abs.set_data(absorption[:,0], absorption[:,1])
@@ -482,9 +490,15 @@ class App(customtkinter.CTk):
         # update vertical lines
         val_low  = float(self.lower_zero_index.get())
         val_high = float(self.higher_zero_index.get())
+        border_left = val_low - self.zero_bandwidth.get()/2
+        border_right = val_high + self.zero_bandwidth.get()/2
 
         self.vline_low.set_xdata([val_low, val_low])
         self.vline_high.set_xdata([val_high, val_high])
+        self.shade_low.set_x(max(val_low - self.zero_bandwidth.get()/2, absorption[0,0]))
+        self.shade_low.set_width(self.zero_bandwidth.get()-(max(border_left, absorption[0,0]) - border_left))
+        self.shade_high.set_x(val_high - self.zero_bandwidth.get()/2)
+        self.shade_high.set_width(self.zero_bandwidth.get()+(min(border_right, absorption[-1,0]) - border_right))
 
         # refresh only the artists (faster than full draw)
         self.ax.relim()
@@ -492,10 +506,10 @@ class App(customtkinter.CTk):
         self.canvas.draw_idle()
 
     def cross_sections_plot(self):
-        self.clear_axis()
+        self.clear_figure()
         # absorption_depth in cm, accounts for reabsorption in the crystal
 
-        self.sigma_a = calc_absorption(self.material_dict, filter_width=float(self.fourier_filter.get()), savgol_filter_width=int(self.savgol_filter.get()))[0]
+        self.sigma_a = calc_absorption(self.material_dict, filter_width=float(self.FF_absorption.get()), savgol_filter_width=int(self.savgol_filter.get()))[0]
 
         plot_list = [self.sigma_a]
         plot_list_labels = [f"$\\sigma_a$ {self.material_dict['name']}"]
@@ -626,7 +640,8 @@ class App(customtkinter.CTk):
     def save_project(self, filename):
         # collect all data-variables to be saved into a dictionary
         project_data = {}
-        for val in self.save_attributes:
+        for name in self.save_attributes:
+            val = getattr(self, name)
             # unwrap Tkinter variables automatically
             if isinstance(val, (
                 customtkinter.CTkLabel,
@@ -638,7 +653,7 @@ class App(customtkinter.CTk):
                 continue
             if hasattr(val, "get"):
                 value = val.get()
-                project_data[val.winfo_name()] = value
+                project_data[name] = value
 
         # Read out the variables and convert to JSON-safe dict
         def to_json_safe(obj):
@@ -674,10 +689,15 @@ class App(customtkinter.CTk):
                     attr.deselect()
         
         self.close_sidebar_window()
+        self.material_dict["folder_path"] = self.material_list.get()
 
-    def update_slider_value(self, value):
+    def update_abs_slider_value(self, value):
         self.update_material_dictionary(value)
         self.update_absorption_plot()
+    
+    def update_fluo_slider_value(self, value):
+        self.update_material_dictionary(value)
+        self.update_fluorescence_plot()
 
     def update_canvas_size(self, canvas_ratio):
         canvas_width = float(self.canvas_width.get())
@@ -840,8 +860,8 @@ def calc_cubic_interpolation(absorption, reference, zero_absorption_width, mid_l
         2D array with columns [x, y_absorption].
     reference : np.ndarray
         2D array with columns [x, y_reference].
-    zero_absorption_width : int
-        Number of pixels around each center index used for interpolation regions.
+    zero_absorption_width : float
+        Width in the same units as absorption[:,0] around each center index used for interpolation regions.
     mid_lambda1 : float, optional
         Center wavelength for the first region (default 0, start of array).
     mid_lambda2 : float, optional
@@ -852,7 +872,8 @@ def calc_cubic_interpolation(absorption, reference, zero_absorption_width, mid_l
     np.ndarray
         Interpolated values of the cubic polynomial evaluated over absorption[:,0].
     """
-    w = zero_absorption_width
+    dlambda = absorption[1,0] - absorption[0,0]
+    w = int(zero_absorption_width / dlambda)  # Convert width in nm to number of pixels
     n = len(absorption)
     mid_idx1 = np.argmin(np.abs(absorption[:,0] - mid_lambda1))
     mid_idx2 = np.argmin(np.abs(absorption[:,0] - mid_lambda2)) if mid_lambda2 != np.inf else len(absorption) - 1
@@ -1002,7 +1023,7 @@ def calc_Z_lower_upper(energies_lower, energies_upper, kbT):
     Z_lower = calc_partition_function(2, Energy_F72, kbT)
     Z_upper = calc_partition_function(2, Energy_F52, kbT)
 
-    print(f"Z_lower = {Z_lower:.3f}\nZ_upper = {Z_upper:.3f}\nZ_l/Z_u = {Z_lower/Z_upper:.3f}")
+    # print(f"Z_lower = {Z_lower:.3f}\nZ_upper = {Z_upper:.3f}\nZ_l/Z_u = {Z_lower/Z_upper:.3f}")
 
     return Z_lower, Z_upper, ZPL
 
@@ -1106,6 +1127,6 @@ def average_MCcumber_FL(material, FL_array, MC_array, FL_min=None, MC_max=None):
 if __name__ == "__main__":
 
     app = App()
-    app.state('zoomed')
+    app.state('normal')
     app.protocol("WM_DELETE_WINDOW", app.on_closing)
     app.mainloop()
