@@ -114,7 +114,7 @@ class App(customtkinter.CTk):
         self.crystal_button     = App.create_switch(frame, row=13, column=0, text="Config Crystal", command=lambda: self.toggle_sidebar_window(self.crystal_button, self.crystal_widgets))
         self.fluorescence_button  = App.create_switch(frame, row=14, column=0, text="Config Fluorescence", command=lambda: self.toggle_sidebar_window(self.fluorescence_button, self.fluorescence_widgets))
         self.absorption_button  = App.create_switch(frame, row=15, column=0, text="Config Absorption", command=lambda: self.toggle_sidebar_window(self.absorption_button, self.absorption_widgets))
-        self.McCumber_button    = App.create_switch(frame, row=16, column=0, text="Config McCumber", command=lambda: self.toggle_sidebar_window(self.McCumber_button, self.cross_section_widgets))
+        self.McCumber_button    = App.create_switch(frame, row=16, column=0, text="Config Cross Sections", command=lambda: self.toggle_sidebar_window(self.McCumber_button, self.cross_section_widgets))
 
 
         # SETTINGS FRAME
@@ -206,11 +206,11 @@ class App(customtkinter.CTk):
 
         return optionmenu
     
-    def create_slider(self, from_, to, row, column, width=200, sliderValue_width=50, text=None, init_val=None, command=None, showSliderValue=False, columnspan=1, number_of_steps=1000, padx = 10, pady=5, sticky='w', **kwargs):
+    def create_slider(self, from_, to, row, column, width=200, sliderValue_width=50, text=None, init_val=None, command=None, SliderValueLabel=False, SliderValueEntry=False, columnspan=1, number_of_steps=1000, padx = 10, pady=5, sticky='w', **kwargs):
         """
         Create a CTkSlider with optional text label and optional live value display.
 
-        If showSliderValue=True:
+        If SliderValueLabel=True:
         - The slider width is reduced by SliderValue_width.
         - A numeric label is placed in the same column to the right.
         - The label updates automatically as the slider moves.
@@ -218,10 +218,10 @@ class App(customtkinter.CTk):
         """
 
         # if slider value display is enabled, bind a variable
-        variable = customtkinter.DoubleVar(value=init_val if init_val is not None else from_) if showSliderValue else None
+        variable = customtkinter.DoubleVar(value=init_val if init_val is not None else from_)
 
         # --- Create slider ---
-        effective_width = width - sliderValue_width if showSliderValue else width
+        effective_width = width - sliderValue_width if (SliderValueLabel or SliderValueEntry) else width
         slider = customtkinter.CTkSlider(self, from_=from_, to=to, width=effective_width, command=command, variable=variable, number_of_steps=number_of_steps)
         slider.grid(column=column, row=row, columnspan=columnspan, padx=padx, pady=pady, sticky=sticky, **kwargs)
         returns = [slider]
@@ -234,7 +234,7 @@ class App(customtkinter.CTk):
             slider_label = App.create_label(self, text=text, column=column - 1, row=row, width=20, anchor='e')
 
         # --- Optional numeric value label on the right ---
-        if showSliderValue:
+        if SliderValueLabel:
             value_label = customtkinter.CTkLabel(self, text=f"{round(slider.get(), 2)}", width=sliderValue_width, anchor='e')
             value_label.grid(column=column + columnspan-1, row=row, padx=(10+width-sliderValue_width, 10), sticky='e')
 
@@ -247,6 +247,33 @@ class App(customtkinter.CTk):
             slider.configure(command=lambda v: variable.set(float(v)))
             variable.trace_add("write", update_value_label)
             returns.append(variable)
+        
+        elif SliderValueEntry:
+            value_entry = App.create_entry(self, row=row, column=column + columnspan-1, width=sliderValue_width, padx=(15+width-sliderValue_width, 5), init_val=round(slider.get(), 2))
+
+            # live update on slider movement
+            def update_value_entry(*_):
+                value_entry.reinsert(str(round(slider.get(), 2)))
+                if command:
+                    command(variable.get())
+
+            slider.configure(command=lambda v: update_value_entry())
+            variable.trace_add("write", update_value_entry)
+            returns.append(variable)
+            
+            # update slider when entry is changed
+            def on_entry_change(event):
+                print("entry changed")
+                print(from_, to, value_entry.get())
+                try:
+                    val = float(value_entry.get())
+                    slider.set(val)
+                    if command:
+                        command(val)
+                except ValueError:
+                    pass  # ignore invalid input
+
+            value_entry.bind("<Return>", on_entry_change)
 
         # Unpack if only one element, else return tuple
         return returns[0] if len(returns) == 1 else tuple(returns)
@@ -294,7 +321,7 @@ class App(customtkinter.CTk):
 
         before_widgets = set(self.settings_frame.winfo_children())
         App.create_label(self.settings_frame, text="Fluorescence Settings", font=customtkinter.CTkFont(size=16, weight="bold"), row=row, column=0, columnspan=4, padx=20, pady=(20, 5),sticky=None)
-        self.FF_fluorescence, self.FF_fluorescence_var        = App.create_slider(self.settings_frame, from_=0, to=1, column=1, row=row+2, width=150, text="fourier filter (raw data)", init_val=0.6, number_of_steps=100, showSliderValue=True, command= self.update_fluo_slider_value)
+        self.FF_fluorescence, self.FF_fluorescence_var        = App.create_slider(self.settings_frame, from_=0, to=1, column=1, row=row+2, width=150, text="fourier filter (raw data)", init_val=0.6, number_of_steps=100, SliderValueLabel=True, command= self.update_fluo_slider_value)
 
         self.fluorescence_widgets = set(self.settings_frame.winfo_children()) - before_widgets
         self.toggle_sidebar_window(self.fluorescence_button, self.fluorescence_widgets, First_time=True)
@@ -304,11 +331,11 @@ class App(customtkinter.CTk):
 
         before_widgets = set(self.settings_frame.winfo_children())
         App.create_label(self.settings_frame, text="Absorption Settings", font=customtkinter.CTkFont(size=16, weight="bold"), row=row, column=0, columnspan=4, padx=20, pady=(20, 5),sticky=None)
-        self.FF_absorption, self.FF_absorption_var        = App.create_slider(self.settings_frame, from_=0, to=1, column=1, row=row+1, width=150, text="fourier filter (raw data)", init_val=0, number_of_steps=100, showSliderValue=True, command= self.update_abs_slider_value)
-        self.savgol_filter, self.savgol_filter_var          = App.create_slider(self.settings_frame, from_=0, to=50, column=1, row=row+2, width=150, text="Savitzky Golay filter (σ)", init_val=0, number_of_steps=50, showSliderValue=True, command= self.update_abs_slider_value)
-        self.zero_bandwidth, self.zero_bandwidth_var        = App.create_slider(self.settings_frame, from_=0, to=100, column=1, row=row+3, width=150, text="zero abs. bandwidth [nm]", init_val=0, number_of_steps=100, showSliderValue=True, command= self.update_abs_slider_value)
-        self.lower_zero_index, self.lower_zero_index_var    = App.create_slider(self.settings_frame, from_=0, to=1, column=1, row=row+4, width=150, text="zero wavelength 1 [nm]", init_val=1, number_of_steps=100, showSliderValue=True, command= self.update_abs_slider_value)
-        self.higher_zero_index, self.higher_zero_index_var  = App.create_slider(self.settings_frame, from_=0, to=1, column=1, row=row+5, width=150, text="zero wavelength 2 [nm]", init_val=1, number_of_steps=100, showSliderValue=True, command= self.update_abs_slider_value)
+        self.FF_absorption, self.FF_absorption_var        = App.create_slider(self.settings_frame, from_=0, to=1, column=1, row=row+1, width=150, text="fourier filter (raw data)", init_val=0, number_of_steps=100, SliderValueLabel=True, command= self.update_abs_slider_value)
+        self.savgol_filter, self.savgol_filter_var          = App.create_slider(self.settings_frame, from_=0, to=50, column=1, row=row+2, width=150, text="Savitzky Golay filter (σ)", init_val=0, number_of_steps=50, SliderValueLabel=True, command= self.update_abs_slider_value)
+        self.zero_bandwidth, self.zero_bandwidth_var        = App.create_slider(self.settings_frame, from_=0, to=100, column=1, row=row+3, width=150, text="zero abs. bandwidth [nm]", init_val=0, number_of_steps=100, SliderValueEntry=True, command= self.update_abs_slider_value)
+        self.lower_zero_index, self.lower_zero_index_var    = App.create_slider(self.settings_frame, from_=0, to=1, column=1, row=row+4, width=150, text="zero wavelength 1 [nm]", init_val=1, number_of_steps=100, SliderValueEntry=True, command= self.update_abs_slider_value)
+        self.higher_zero_index, self.higher_zero_index_var  = App.create_slider(self.settings_frame, from_=0, to=1, column=1, row=row+5, width=150, text="zero wavelength 2 [nm]", init_val=1, number_of_steps=100, SliderValueEntry=True, command= self.update_abs_slider_value)
 
         self.absorption_widgets = set(self.settings_frame.winfo_children()) - before_widgets
         self.toggle_sidebar_window(self.absorption_button, self.absorption_widgets, First_time=True)
@@ -316,12 +343,13 @@ class App(customtkinter.CTk):
     def load_cross_section_sidebar(self):
         row = 30
         before_widgets = set(self.settings_frame.winfo_children()) # font=customtkinter.CTkFont(size=16, weight="bold")
-        self.average_sigma = App.create_switch(self.settings_frame, row=row, column=0, text="Average MC Cumber", columnspan=4, padx=20, pady=(20, 5),sticky=None, font=customtkinter.CTkFont(size=16, weight="bold"), command=lambda: self.cross_sections_plot())
-        self.MC_central, self.MC_central_var = App.create_slider(self.settings_frame, from_=0, to=1, column=1, row=row+2, width=150, text="MC central WL", init_val=0, number_of_steps=100, showSliderValue=True, command=lambda value: self.update_cross_sections_plot())
-        self.MC_width, self.MC_width_var = App.create_slider(self.settings_frame, from_=0, to=50, column=1, row=row+3, width=150, text="average bandwidth", init_val=0, number_of_steps=100, showSliderValue=True, command=lambda value: self.update_cross_sections_plot())
+        self.line_transitions = App.create_switch(self.settings_frame, row=row, column=0, text="Show Line Transitions", columnspan=4, padx=20, pady=(20, 5),sticky=None, command=lambda: self.cross_sections_plot())
+        self.average_sigma = App.create_switch(self.settings_frame, row=row+1, column=0, text="Average MC Cumber", columnspan=4, padx=20, pady=(20, 5),sticky=None, font=customtkinter.CTkFont(size=16, weight="bold"), command=lambda: self.cross_sections_plot())
+        self.MC_central, self.MC_central_var = App.create_slider(self.settings_frame, from_=0, to=1, column=1, row=row+2, width=150, text="MC central WL", init_val=0, number_of_steps=100, SliderValueEntry=True, command=lambda value: self.update_cross_sections_plot())
+        self.MC_width, self.MC_width_var = App.create_slider(self.settings_frame, from_=0, to=50, column=1, row=row+3, width=150, text="average bandwidth", init_val=0, number_of_steps=100, SliderValueEntry=True, command=lambda value: self.update_cross_sections_plot())
 
         self.FL_title = App.create_label(self.settings_frame, row=row+5, column=0, text="FL Settings", font=customtkinter.CTkFont(size=16, weight="bold"), columnspan=4, padx=20, pady=(20, 5),sticky=None)
-        self.FL_absorption, self.FL_absorption_var = App.create_slider(self.settings_frame, from_=0, to=3, column=1, row=row+6, width=150, text="absorption depth [mm]", init_val=0, number_of_steps=100, showSliderValue=True, command=lambda value: self.update_cross_sections_plot())
+        self.FL_absorption, self.FL_absorption_var = App.create_slider(self.settings_frame, from_=0, to=3, column=1, row=row+6, width=150, text="absorption depth [mm]", init_val=0, number_of_steps=100, SliderValueLabel=True, command=lambda value: self.update_cross_sections_plot())
 
         # for widget in [self.MC_central, self.MC_width, self.FL_absorption]:
         #     widget.bind("<KeyRelease>", lambda val: self.update_material_dictionary(val))
@@ -361,12 +389,14 @@ class App(customtkinter.CTk):
 
         try:
             sigma_a, absorption, reference, ratio = calc_absorption(self.material_dict, filter_width=float(self.FF_absorption.get()), savgol_filter_width=int(self.savgol_filter.get()))
-            self.higher_zero_index.configure(from_=absorption[0,0], to=absorption[-1,0])
-            self.lower_zero_index.configure(from_=absorption[0,0], to=absorption[-1,0])
-            self.higher_zero_index.set(absorption[-1,0])
-            self.lower_zero_index.set(absorption[0,0])
+            lam_min = int(absorption[0,0])+1
+            lam_max = int(absorption[-1,0])
+            self.higher_zero_index.configure(from_=lam_min, to=lam_max, number_of_steps=int(lam_max - lam_min))
+            self.lower_zero_index.configure(from_=lam_min, to=lam_max, number_of_steps=int(lam_max - lam_min))
+            self.higher_zero_index.set(lam_max)
+            self.lower_zero_index.set(lam_min)
 
-            self.MC_central.configure(from_=absorption[0,0], to=absorption[-1,0])
+            self.MC_central.configure(from_=lam_min, to=lam_max, number_of_steps=int(lam_max - lam_min))
             
 
         except:
@@ -546,6 +576,13 @@ class App(customtkinter.CTk):
                 self.ax.set_ylim(-1e-21,1.3*max(np.max(self.sigma_a[:,1]), np.max(self.sigma_e[:,1])))
 
 
+        if self.line_transitions.get():
+            energy_lower = self.material_dict.get("energy_lower_level", [0])
+            energy_higher = self.material_dict.get("energy_upper_level", [1e-2/self.material_dict["ZPL"]])
+            for E_u in energy_higher:
+                for E_l in energy_lower:
+                    self.ax.axvline(1/(E_u - E_l)*1e7, color='gray', linestyle=':', lw=0.8)
+                    
         for data, label, name in zip(plot_list, plot_list_labels, plot_list_names):
             setattr(self, name, self.ax.plot(data[:,0], data[:,1], label=label)[0])
 
