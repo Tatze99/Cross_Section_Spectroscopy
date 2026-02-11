@@ -11,7 +11,7 @@ import scipy.integrate as integrate
 from PIL import Image
 import darkdetect
 
-version_number = "25/11"
+version_number = "26/02"
 Standard_path = os.path.dirname(os.path.abspath(__file__))
 
 Delta_lambd = 0.25e-9
@@ -128,6 +128,7 @@ class App(customtkinter.CTk):
         self.plot_settings_title = App.create_label(frame, row=2, column=0, text="Plot settings", font=customtkinter.CTkFont(size=16, weight="bold"), columnspan=2, padx=20, pady=(20, 5),sticky=None)
         self.show_title          = App.create_switch(frame, row=3, column=0, text="Show title", pady=(10,5), columnspan=2)
         self.show_grid           = App.create_switch(frame, row=4, column=0, text="Use Grid", command=self.toggle_grid, columnspan=2)
+        self.show_legend         = App.create_switch(frame, row=5, column=0, text="Show Legend", command=self.toggle_legend, columnspan=2)
 
         self.canvas_size_title = App.create_label(frame, row=9, column=0, text="Canvas Size", font=customtkinter.CTkFont(size=16, weight="bold"), columnspan=2, padx=20, pady=(20, 5),sticky=None)
         self.canvas_width, self.canvas_width_label        = App.create_entry(frame,column=1, row=11, width=70,text="width in cm", placeholder_text="10 [cm]", sticky='w', init_val=10, textwidget=True)
@@ -140,6 +141,7 @@ class App(customtkinter.CTk):
         self.show_grid.select()
         self.use_McCumber.select()
         self.use_Fuchtbauer.select()
+        self.show_legend.select()
 
     # initialize all widgets on the settings frame
     def load_settings_frame(self):
@@ -420,6 +422,11 @@ class App(customtkinter.CTk):
     def toggle_grid(self):
         self.ax.grid(self.show_grid.get())
         plt.rcParams["axes.grid"] = self.show_grid.get()
+    
+    def toggle_legend(self):
+        if hasattr(self, 'legend'):
+            self.legend.set_visible(self.show_legend.get())
+            self.canvas.draw_idle()
 
     def close_sidebar_window(self):
         if not self.crystal_button.get() and not self.absorption_button.get() and not self.McCumber_button.get() and not self.fluorescence_button.get():
@@ -463,7 +470,9 @@ class App(customtkinter.CTk):
 
         self.ax.set_xlabel("wavelength in nm")
         self.ax.set_ylabel("fluorescence intensity in a.u.")
-        self.ax.legend()
+        self.legend = self.ax.legend()
+        self.legend.set_visible(self.show_legend.get())
+
         if self.show_title.get(): self.ax.set_title(f"fluorescence of {self.material_dict['name']}")
         self.update_fluorescence_plot()
 
@@ -490,7 +499,8 @@ class App(customtkinter.CTk):
 
         self.ax.set_xlabel("wavelength in nm")
         self.ax.set_ylabel("absorption in a.u.")
-        self.ax.legend()
+        self.legend = self.ax.legend()
+        self.legend.set_visible(self.show_legend.get())
 
         if self.show_title.get(): self.ax.set_title(f"absorption of {self.material_dict['name']}")
 
@@ -586,7 +596,8 @@ class App(customtkinter.CTk):
         for data, label, name in zip(plot_list, plot_list_labels, plot_list_names):
             setattr(self, name, self.ax.plot(data[:,0], data[:,1], label=label)[0])
 
-        self.ax.legend()
+        self.legend = self.ax.legend()
+        self.legend.set_visible(self.show_legend.get())
         self.canvas.draw()
     
     def update_cross_sections_plot(self):
@@ -654,12 +665,16 @@ class App(customtkinter.CTk):
             # Collect data
             for i, ax in enumerate(self.fig.axes):
                 for j, line in enumerate(ax.get_lines()):
+                    label = line.get_label()
+                    if not label or label.startswith('_'): # skip unlabeled lines
+                        continue
+                    label = label.replace("$", "").replace("\\", "").replace(" ","_")
                     x = line.get_xdata()
                     y = line.get_ydata()
                     # make sure lengths match if different lines differ
                     length = min(len(x), len(y))
                     all_data.append(np.column_stack([x[:length], y[:length]]))
-                    headers.extend([f"X{i}_{j}", f"Y{i}_{j}"])
+                    headers.extend([f"{label}_x", f"{label}_y"])
 
             # Align all datasets by rows (pad with blanks if needed)
             max_len = max(arr.shape[0] for arr in all_data)
