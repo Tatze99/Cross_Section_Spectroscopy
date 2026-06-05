@@ -575,7 +575,7 @@ class App(customtkinter.CTk):
             self.ax.set_ylim(-1e-21,2*np.max(self.sigma_a[:,1]))
 
             if self.use_Fuchtbauer.get() and self.average_sigma.get():
-                self.McCumber_line = self.ax.axvline(self.MC_central.get(), color='red', linestyle='--', lw=0.8)
+                self.McCumber_line = self.ax.axvline(self.MC_central.get(), color='red', linestyle='--', lw=0.8, alpha=0.5)
                 self.sigma_e_average = average_MCcumber_FL(self.material_dict, self.sigma_e, self.sigma_e_McCumber, self.MC_central.get() - self.MC_width.get()/2, self.MC_central.get() + self.MC_width.get()/2)
                 self.sigma_a_average = McCumber_relation(self.E_l, self.E_u, self.sigma_e_average, thermal_energy, inverse_relation=True)
                 plot_list += [self.sigma_e_average, self.sigma_a_average]
@@ -585,6 +585,9 @@ class App(customtkinter.CTk):
             if self.use_Fuchtbauer.get():
                 self.ax.set_ylim(-1e-21,1.3*max(np.max(self.sigma_a[:,1]), np.max(self.sigma_e[:,1])))
 
+        plot_linewidth = np.ones((len(plot_list)))*1.5
+        if self.use_McCumber.get() and self.use_Fuchtbauer.get() and self.average_sigma.get():
+            plot_linewidth[:-2] = 0.5
 
         if self.line_transitions.get():
             energy_lower = self.material_dict.get("energy_lower_level", [0])
@@ -593,8 +596,8 @@ class App(customtkinter.CTk):
                 for E_l in energy_lower:
                     self.ax.axvline(1/(E_u - E_l)*1e7, color='gray', linestyle=':', lw=0.8)
                     
-        for data, label, name in zip(plot_list, plot_list_labels, plot_list_names):
-            setattr(self, name, self.ax.plot(data[:,0], data[:,1], label=label)[0])
+        for data, label, name, linewdith in zip(plot_list, plot_list_labels, plot_list_names, plot_linewidth):
+            setattr(self, name, self.ax.plot(data[:,0], data[:,1], label=label, lw=linewdith)[0])
 
         self.legend = self.ax.legend()
         self.legend.set_visible(self.show_legend.get())
