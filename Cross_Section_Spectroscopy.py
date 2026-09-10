@@ -106,6 +106,7 @@ class App(customtkinter.CTk):
 
         # bottom settings
         self.save_button    = App.create_button(frame, text="Save figure/data", command=self.save_figure,     column=0, row=23,  image=self.img_save, pady=(5,15))
+        self.save_final_button = App.create_button(frame, text="Save final data", command=self.save_final_data, column=0, row=24,  image=self.img_save, pady=(5,15))
         
         #switches
         self.config_title       = App.create_label(frame, row=10, column=0, text="Configure Simulation", font=customtkinter.CTkFont(size=16, weight="bold"), padx=20, pady=(20, 5),sticky=None)
@@ -126,9 +127,9 @@ class App(customtkinter.CTk):
         self.load_data_button    = App.create_button(frame, row=1, column=1, text="load project", command=lambda: self.load_project(os.path.join(self.folder_path.get(), f"{self.json_path.get()}.json")), image=self.img_folder, width=110)
 
         self.plot_settings_title = App.create_label(frame, row=2, column=0, text="Plot settings", font=customtkinter.CTkFont(size=16, weight="bold"), columnspan=2, padx=20, pady=(20, 5),sticky=None)
-        self.show_title          = App.create_switch(frame, row=3, column=0, text="Show title", pady=(10,5), columnspan=2)
-        self.show_grid           = App.create_switch(frame, row=4, column=0, text="Use Grid", command=self.toggle_grid, columnspan=2)
-        self.show_legend         = App.create_switch(frame, row=5, column=0, text="Show Legend", command=self.toggle_legend, columnspan=2)
+        self.show_title          = App.create_switch(frame, row=3, column=0, text="Show title", pady=(10,5), columnspan=2, padx=20)
+        self.show_grid           = App.create_switch(frame, row=4, column=0, text="Use Grid", command=self.toggle_grid, columnspan=2, padx=20)
+        self.show_legend         = App.create_switch(frame, row=5, column=0, text="Show Legend", command=self.toggle_legend, columnspan=2, padx=20)
 
         self.canvas_size_title = App.create_label(frame, row=9, column=0, text="Canvas Size", font=customtkinter.CTkFont(size=16, weight="bold"), columnspan=2, padx=20, pady=(20, 5),sticky=None)
         self.canvas_width, self.canvas_width_label        = App.create_entry(frame,column=1, row=11, width=70,text="width in cm", placeholder_text="10 [cm]", sticky='w', init_val=10, textwidget=True)
@@ -372,6 +373,7 @@ class App(customtkinter.CTk):
     # load the material
     def load_material(self, material):
         path = os.path.join(Standard_path, "measurements", material, "basedata.json")
+        self.folder_path.reinsert(os.path.join(Standard_path, "measurements", material))
         with open(path, "r") as file:
             self.material_dict = json.load(file)
 
@@ -578,9 +580,9 @@ class App(customtkinter.CTk):
                 self.McCumber_line = self.ax.axvline(self.MC_central.get(), color='red', linestyle='--', lw=0.8, alpha=0.5)
                 self.sigma_e_average = average_MCcumber_FL(self.material_dict, self.sigma_e, self.sigma_e_McCumber, self.MC_central.get() - self.MC_width.get()/2, self.MC_central.get() + self.MC_width.get()/2)
                 self.sigma_a_average = McCumber_relation(self.E_l, self.E_u, self.sigma_e_average, thermal_energy, inverse_relation=True)
-                plot_list += [self.sigma_e_average, self.sigma_a_average]
-                plot_list_labels += ["$\\sigma_e$ average", "$\\sigma_a$ average"]
-                plot_list_names += ["line_sigma_e_average", "line_sigma_a_average"]
+                plot_list += [self.sigma_a_average, self.sigma_e_average]
+                plot_list_labels += ["$\\sigma_a$ average", "$\\sigma_e$ average"]
+                plot_list_names += ["line_sigma_a_average", "line_sigma_e_average"]
             
             if self.use_Fuchtbauer.get():
                 self.ax.set_ylim(-1e-21,1.3*max(np.max(self.sigma_a[:,1]), np.max(self.sigma_e[:,1])))
@@ -691,6 +693,36 @@ class App(customtkinter.CTk):
                 f.write("\t".join(headers) + "\n")
                 for row in aligned:
                     f.write("\t".join(f"{float(val):.5e}" if val != "" else "" for val in row) + "\n")
+
+    def save_final_data(self):
+        # Collect data from the plots
+        all_data = []
+        headers = []
+
+        for i, ax in enumerate(self.fig.axes):
+            for j, line in enumerate(ax.get_lines()[-2:]):
+                label = line.get_label()
+                if not label or label.startswith('_'):  # skip unlabeled lines
+                    continue
+                label = label.replace("$", "").replace("\\", "").replace(" ", "_")
+                y = line.get_ydata()
+                if j == 0: 
+                    x = line.get_xdata()
+                    length = min(len(x), len(y))
+                    all_data.append(np.column_stack([x[:length], y[:length]]))
+                    headers.extend([f"wavelength [nm]", f"sigma_a [cm2]"])
+                else: 
+                    all_data.append(y)
+                    headers.extend(["sigma_e [cm2]"])
+
+        all_data = np.column_stack(all_data)
+        # Write to file
+        file_names = ["cross_sections", "sigma_a", "sigma_e"]
+        slices = [slice(0,3), slice(0,2), slice(0,3,2)]
+        save_directory = os.path.join(Standard_path, "measurements", self.material_list.get(), "results")
+        os.makedirs(save_directory, exist_ok=True)
+        for i, (file_name, s) in enumerate(zip(file_names, slices)):
+            np.savetxt(os.path.join(save_directory, f"{self.material_list.get()}_{file_name}.txt"), all_data[:, s], header="\t".join(headers[s]), fmt="%.5e", delimiter="\t")
 
     def save_project(self, filename):
         # collect all data-variables to be saved into a dictionary
@@ -1062,7 +1094,7 @@ def calc_partition_function(degeneracies, energies, kbT):
         Z += d*np.exp(-energy / kbT)
     return Z
 
-def calc_Z_lower_upper(energies_lower, energies_upper, kbT):
+def calc_Z_lower_upper(energies_lower, energies_upper, kbT=kbT):
     # convert energies from cm^-1 to eV
     energies_lower = np.array(energies_lower)*hc
     energies_upper = np.array(energies_upper)*hc
