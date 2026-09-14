@@ -73,8 +73,8 @@ class App(customtkinter.CTk):
         self.img_absorption = customtkinter.CTkImage(dark_image=Image.open(os.path.join(Standard_path,"ui_images","absorption.png")), size=(15, 15))
 
     def initialize_variables(self):
-        self.materials = [f for f in os.listdir(os.path.join(Standard_path, "measurements"))]
-
+        self.materials = sorted([f for f in os.listdir(os.path.join(Standard_path, "measurements"))])
+        
         self.ax = None
         self.plot_index = 0
         self.color = "#212121" # toolbar
